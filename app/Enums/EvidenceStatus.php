@@ -7,6 +7,7 @@ enum EvidenceStatus: string
     case Queued = 'queued';
     case Processing = 'processing';
     case Extracted = 'extracted';
+    case PendingEmployeeConfirmation = 'pending_employee_confirmation';
     case NeedsReupload = 'needs_reupload';
     case PendingAdminExtraction = 'pending_admin_extraction';
     case Failed = 'failed';
