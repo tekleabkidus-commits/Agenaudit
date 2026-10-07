@@ -49,6 +49,32 @@ class EvidenceController extends Controller
         return back()->with('success',count($data['screenshots']).' bank screenshot(s) uploaded for automatic verification.');
     }
 
+    public function confirm(Request $request, EvidenceFile $evidence, \App\Services\Transactions\EvidenceProcessor $processor): RedirectResponse
+    {
+        $this->authorize('update',$evidence->transaction);
+
+        try {
+            $processor->confirmEmployeeExtraction($evidence, $request->user());
+        } catch (\Throwable $e) {
+            return back()->withErrors(['evidence'=>$e->getMessage()]);
+        }
+
+        return back()->with('success','AI extraction confirmed and applied.');
+    }
+
+    public function clearer(Request $request, EvidenceFile $evidence, \App\Services\Transactions\EvidenceProcessor $processor): RedirectResponse
+    {
+        $this->authorize('update',$evidence->transaction);
+
+        try {
+            $processor->requestClearerScreenshot($evidence, $request->user());
+        } catch (\Throwable $e) {
+            return back()->withErrors(['evidence'=>$e->getMessage()]);
+        }
+
+        return back()->with('success','Upload a clearer screenshot.');
+    }
+
     public function retry(Request $request, EvidenceFile $evidence): RedirectResponse
     {
         $this->authorize('update',$evidence->transaction);
