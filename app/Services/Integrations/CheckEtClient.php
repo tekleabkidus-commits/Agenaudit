@@ -51,8 +51,12 @@ class CheckEtClient
         $payload = $this->buildPayload($payment);
         $base = rtrim((string) config('services.check_et.base_url', 'https://api.check.et'), '/');
 
+        $timeout = $this->settings->int('check_et.timeout_seconds', (int) config('services.check_et.timeout', 8));
+        $attempts = max(1, $this->settings->int('check_et.retries', 1) + 1);
+
         try {
-            $response = Http::timeout((int) config('services.check_et.timeout', 8))
+            $response = Http::timeout($timeout)
+                ->retry($attempts, 250, throw: false)
                 ->acceptJson()
                 ->withToken((string) config('services.check_et.api_key'))
                 ->withHeaders(['Content-Type'=>'application/json'])
