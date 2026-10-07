@@ -48,14 +48,16 @@ class DatabaseSeeder extends Seeder
             ['ZEMEN', 'Zemen Bank', 'zemen', false, 'none'],
             ['CBEBIRR', 'CBE Birr', 'cbebirr', true, 'sender_account'],
             ['MPESA', 'M-Pesa Ethiopia', 'mpesa', false, 'none'],
-            ['SIINQEE', 'Siinqee Bank', 'siinqee', false, 'none'],
+            ['SIINQEE', 'Siinqee Bank', 'siinqee', false, 'none', false],
             ['AMHARA', 'Amhara Bank', 'amhara', false, 'none'],
-        ] as [$code, $name, $checkEtCode, $requiresAccount, $accountSource]) {
+        ] as $row) {
+            [$code, $name, $checkEtCode, $requiresAccount, $accountSource] = array_slice($row, 0, 5);
+            $checkEtEnabled = $row[5] ?? true;
             Bank::firstOrCreate(['code' => $code], [
                 'name' => $name,
                 'aliases' => [$code, $name],
                 'check_et_code' => $checkEtCode,
-                'check_et_enabled' => true,
+                'check_et_enabled' => $checkEtEnabled,
                 'check_et_requires_account' => $requiresAccount,
                 'check_et_account_source' => $accountSource,
                 'is_active' => true,
