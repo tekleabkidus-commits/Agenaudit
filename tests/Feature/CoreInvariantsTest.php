@@ -75,4 +75,15 @@ class CoreInvariantsTest extends TestCase
   $this->assertSame('0911223344',$payload['account_number']);
  }
 
+ public function test_employee_brand_assignments_allow_multiple_brands_and_deny_unassigned_brand(): void
+ {
+  $b1=$this->brand('Assigned Brand A');$b2=$this->brand('Assigned Brand B');$b3=$this->brand('Unassigned Brand');
+  $u=$this->user();
+  $u->brands()->sync([$b1->id,$b2->id]);
+
+  $this->assertTrue($u->canAccessBrand($b1->id));
+  $this->assertTrue($u->canAccessBrand($b2->id));
+  $this->assertFalse($u->canAccessBrand($b3->id));
+ }
+
 }
