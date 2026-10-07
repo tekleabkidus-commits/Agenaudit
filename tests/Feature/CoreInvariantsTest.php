@@ -56,7 +56,8 @@ class CoreInvariantsTest extends TestCase
    $bank=Bank::where('code',$code)->first();
    $this->assertNotNull($bank,"Missing seeded bank {$code}");
    $this->assertSame($checkEtCode,$bank->check_et_code);
-   $this->assertTrue($bank->check_et_enabled);
+   if($code==='SIINQEE') $this->assertFalse($bank->check_et_enabled);
+   else $this->assertTrue($bank->check_et_enabled);
    $this->assertTrue($bank->is_active);
   }
   $this->assertSame('receiving_account',Bank::where('code','CBE')->value('check_et_account_source'));
