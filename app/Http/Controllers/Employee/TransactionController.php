@@ -76,8 +76,22 @@ class TransactionController extends Controller
     {
         $this->authorize('update',$transaction);
         abort_unless($transaction->type === TransactionType::Withdrawal, 404);
-        $data = $request->validate(['reason'=>['required','string','min:3','max:1000']]);
-        $transaction->update(['reason'=>$data['reason']]);
+        $reasons = array_keys(config('agent_audit.withdrawal_reasons', []));
+        $data = $request->validate([
+            'reason_code'=>['required',Rule::in($reasons)],
+            'reason_note'=>[
+                Rule::requiredIf($request->input('reason_code') === 'other'),
+                'nullable','string','min:3','max:1000',
+            ],
+        ]);
+
+        $label = config('agent_audit.withdrawal_reasons.'.$data['reason_code'], $data['reason_code']);
+        $note = trim((string)($data['reason_note'] ?? ''));
+        $transaction->update([
+            'withdrawal_reason_code'=>$data['reason_code'],
+            'withdrawal_reason_note'=>$note !== '' ? $note : null,
+            'reason'=>$note !== '' ? $label.' — '.$note : $label,
+        ]);
         $workflow->recalculate($transaction);
         return back()->with('success','Withdrawal reason saved.');
     }
