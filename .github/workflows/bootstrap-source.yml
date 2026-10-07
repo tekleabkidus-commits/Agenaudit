@@ -1,0 +1,43 @@
+name: Expand Agent Audit source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.upload/source.b64'
+      - '.github/workflows/bootstrap-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Expand sanitized Laravel source
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d .upload/source.b64 > /tmp/agent-audit-source.zip
+          rm -rf .upload
+          unzip -o /tmp/agent-audit-source.zip -d .
+          rm -f .github/workflows/bootstrap-source.yml
+
+      - name: Commit expanded source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Expand Laravel Agent Audit source"
+          git push
