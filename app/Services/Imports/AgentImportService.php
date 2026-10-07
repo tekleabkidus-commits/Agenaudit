@@ -23,12 +23,12 @@ class AgentImportService
                 $id=Normalizer::identifier($idRaw); $user=Normalizer::identifier($userRaw); if($id)$ids[]=$id; if($user)$users[]=$user;
                 $prepared[]=['row_number'=>$i+2,'brand_name'=>$brandName,'agent_id'=>$idRaw,'agent_username'=>$userRaw,'id_norm'=>$id,'user_norm'=>$user];
             }
-            $brands=Brand::all()->keyBy(fn(Brand $b)=>Normalizer::name($b->name));
+            $brands=Brand::where('is_active',true)->get()->keyBy(fn(Brand $b)=>Normalizer::name($b->name));
             $existingById=$this->agentsByNormalized('agent_id_normalized',$ids); $existingByUser=$this->agentsByNormalized('username_normalized',$users);
             $seenIds=[]; $seenUsers=[]; $summary=['total'=>0,'valid'=>0,'errors'=>0,'new'=>0,'unchanged'=>0,'move'=>0]; $inserts=[]; $now=now();
             foreach($prepared as $r){
                 $summary['total']++; $errors=[]; $brand=$brands->get(Normalizer::name($r['brand_name'])); $id=$r['id_norm']; $user=$r['user_norm'];
-                if(!$brand)$errors[]='Unknown brand. Add the brand first.'; if(!$id)$errors[]='Agent ID is empty.'; if(!$user)$errors[]='Agent Username is empty.';
+                if(!$brand)$errors[]='Brand does not exist or is inactive. Add/activate the brand before importing this agent.'; if(!$id)$errors[]='Agent ID is empty.'; if(!$user)$errors[]='Agent Username is empty.';
                 if($id&&isset($seenIds[$id]))$errors[]='Duplicate Agent ID inside this Excel file.'; if($user&&isset($seenUsers[$user]))$errors[]='Duplicate Agent Username inside this Excel file.'; if($id)$seenIds[$id]=true; if($user)$seenUsers[$user]=true;
                 $byId=$id?($existingById[$id]??null):null; $byUser=$user?($existingByUser[$user]??null):null; $action=null; $resolved=null;
                 if(!$errors){ if(!$byId&&!$byUser)$action='new'; elseif($byId&&$byUser&&$byId->id===$byUser->id){$resolved=$byId;$action=$brand&&$byId->brand_id!==$brand->id?'move':'unchanged';} else $errors[]='Agent ID or username conflicts with another existing platform agent.'; }
@@ -49,7 +49,7 @@ class AgentImportService
         if($import->move_rows>0&&!$allowMoves)throw new RuntimeException('This import moves existing agents between brands; explicit move confirmation is required.');
         DB::transaction(function() use($import,$admin){
             foreach($import->rows()->where('status','valid')->orderBy('row_number')->cursor() as $row){
-                $brand=Brand::whereKey($row->resolved_brand_id)->lockForUpdate()->firstOrFail(); $id=Normalizer::identifier($row->agent_id); $user=Normalizer::identifier($row->agent_username);
+                $brand=Brand::whereKey($row->resolved_brand_id)->where('is_active',true)->lockForUpdate()->first(); if(!$brand) throw new RuntimeException("Brand for row {$row->row_number} no longer exists or is inactive; preview the file again."); $id=Normalizer::identifier($row->agent_id); $user=Normalizer::identifier($row->agent_username);
                 $byId=Agent::where('agent_id_normalized',$id)->lockForUpdate()->first(); $byUser=Agent::where('username_normalized',$user)->lockForUpdate()->first();
                 if($row->action==='new'){
                     if($byId||$byUser)throw new RuntimeException("Import conflict appeared after preview at row {$row->row_number}; preview the file again.");
