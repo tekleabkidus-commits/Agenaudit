@@ -27,8 +27,11 @@ class TransactionController extends Controller
             ->where(function ($q) use ($brandIds) {
                 $q->whereNull('brand_id')->orWhereIn('brand_id',$brandIds);
             })
+            ->when($request->filled('type'), fn($q)=>$q->where('type',$request->input('type')))
+            ->when($request->filled('status'), fn($q)=>$q->where('status',$request->input('status')))
             ->latest()
-            ->paginate(25);
+            ->paginate(25)
+            ->withQueryString();
         return view('employee.transactions.index', compact('transactions'));
     }
 
