@@ -60,7 +60,8 @@ class TransactionController extends Controller
         $agent = null;
         if ($type === TransactionType::CreditRepayment) {
             $request->validate(['repayment_agent_id'=>['required','integer','exists:agents,id']]);
-            $agent = Agent::findOrFail($validated['repayment_agent_id']);
+            $agent = Agent::with('brand')->findOrFail($validated['repayment_agent_id']);
+            abort_unless($agent->is_active && $agent->brand?->is_active, 422, 'This agent or brand is inactive.');
             abort_unless($request->user()->canAccessBrand($agent->brand_id), 403, 'You are not assigned to this agent brand.');
         }
         $transaction = $workflow->create($request->user(), $type, $agent);
