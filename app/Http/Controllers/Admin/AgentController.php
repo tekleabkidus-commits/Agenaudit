@@ -43,10 +43,19 @@ class AgentController extends Controller
 
     public function edit(Agent $agent, CreditLedgerService $credits): View
     {
+        $agent->load(['brand','brandHistories.fromBrand','brandHistories.toBrand','creditLedgerEntries.transaction','transactions.employee']);
+
+        $creditRecords = $agent->creditRecords()
+            ->with(['issueTransaction','repaymentAllocations.repaymentTransaction'])
+            ->latest('issued_at')
+            ->get()
+            ->each(fn($record) => $record->setAttribute('aging_status', $credits->agingStatus($record)));
+
         return view('admin.agents.edit',[
-            'agent'=>$agent->load(['brand','brandHistories.fromBrand','brandHistories.toBrand','creditLedgerEntries.transaction','transactions.employee']),
+            'agent'=>$agent,
             'brands'=>Brand::orderBy('name')->get(),
             'outstanding'=>$credits->outstanding($agent),
+            'creditRecords'=>$creditRecords,
             'commissionUsedThisMonth'=>$agent->transactions()->where('type',\App\Enums\TransactionType::Commission->value)->where('status',\App\Enums\TransactionStatus::Completed->value)->whereBetween('completed_at',[now()->startOfMonth(),now()->endOfMonth()])->count(),
         ]);
     }
