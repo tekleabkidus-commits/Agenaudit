@@ -17,7 +17,7 @@
     <section class="card">
         <h3 class="section-title">Stage import</h3>
         <div class="tiny muted" style="margin-bottom:12px">
-            Download the sample first if you are unsure about the format. Keep the three column names exactly as shown, replace the sample rows with your real agents, then upload the XLSX.
+            Download the sample first if you are unsure about the format. Brand Name must match an active existing brand in Agent Audit. Unknown or inactive brands are rejected and the import cannot be confirmed until the file is corrected.
         </div>
         <form method="post" action="{{ route('admin.agent-imports.store') }}" enctype="multipart/form-data" class="stack">
             @csrf
