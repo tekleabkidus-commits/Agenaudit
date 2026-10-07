@@ -12,13 +12,14 @@ Artisan::command('agent-audit:health', function () {
 })->purpose('Check application boot health');
 
 Artisan::command('agent-audit:create-admin {--name=} {--username=} {--email=} {--password=}', function () {
-    $name = trim((string) ($this->option('name') ?: $this->ask('Admin full name', 'System Administrator')));
-    $username = trim((string) ($this->option('username') ?: $this->ask('Admin username')));
-    $email = trim((string) ($this->option('email') ?: $this->ask('Admin email (optional)', '')));
-    $password = (string) ($this->option('password') ?: $this->secret('Admin password'));
+    $name = trim((string) ($this->option('name') ?: env('BOOTSTRAP_ADMIN_NAME', 'System Administrator')));
+    $username = trim((string) ($this->option('username') ?: env('BOOTSTRAP_ADMIN_USERNAME', '')));
+    $email = trim((string) ($this->option('email') ?: env('BOOTSTRAP_ADMIN_EMAIL', '')));
+    $password = (string) ($this->option('password') ?: env('BOOTSTRAP_ADMIN_PASSWORD', ''));
 
-    if ($password === '') {
-        $this->error('Password is required.');
+    if ($username === '' || $password === '') {
+        $this->error('Laravel Cloud commands are non-interactive. Set BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD in the environment, then run this command again.');
+        $this->line('Optional: BOOTSTRAP_ADMIN_NAME and BOOTSTRAP_ADMIN_EMAIL.');
         return self::FAILURE;
     }
 
@@ -59,6 +60,8 @@ Artisan::command('agent-audit:create-admin {--name=} {--username=} {--email=} {-
     if ($user->email) {
         $this->line('Email: '.$user->email);
     }
+    $this->newLine();
+    $this->comment('Security: remove BOOTSTRAP_ADMIN_PASSWORD from Laravel Cloud environment variables after the account is created.');
 
     return self::SUCCESS;
-})->purpose('Create an active Agent Audit administrator account');
+})->purpose('Create an active Agent Audit administrator account using Laravel Cloud environment secrets');
