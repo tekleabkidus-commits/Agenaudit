@@ -15,4 +15,5 @@ class Brand extends Model
     public function agents(): HasMany { return $this->hasMany(Agent::class); }
     public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
     public function receivingAccounts(): BelongsToMany { return $this->belongsToMany(ReceivingAccount::class); }
+    public function users(): BelongsToMany { return $this->belongsToMany(User::class)->withTimestamps(); }
 }
