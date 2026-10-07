@@ -12,6 +12,7 @@ use App\Support\Normalizer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class AgentController extends Controller
@@ -32,7 +33,7 @@ class AgentController extends Controller
 
     public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
-        $data=$request->validate(['brand_id'=>['required','exists:brands,id'],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'credit_due_days'=>['nullable','integer','min:0','max:365'],'commission_monthly_limit'=>['nullable','integer','min:1','max:31']]);
+        $data=$request->validate(['brand_id'=>['required',Rule::exists('brands','id')->where(fn($q)=>$q->where('is_active',true))],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'credit_due_days'=>['nullable','integer','min:0','max:365'],'commission_monthly_limit'=>['nullable','integer','min:1','max:31']]);
         $id=Normalizer::identifier($data['agent_id']); $user=Normalizer::identifier($data['username']);
         if (Agent::where('agent_id_normalized',$id)->exists()) return back()->withErrors(['agent_id'=>'Agent ID must be globally unique across all brands.'])->withInput();
         if (Agent::where('username_normalized',$user)->exists()) return back()->withErrors(['username'=>'Agent username must be globally unique across all brands.'])->withInput();
@@ -62,7 +63,7 @@ class AgentController extends Controller
 
     public function update(Request $request, Agent $agent, AuditLogger $audit): RedirectResponse
     {
-        $data=$request->validate(['brand_id'=>['required','exists:brands,id'],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'credit_due_days'=>['nullable','integer','min:0','max:365'],'commission_monthly_limit'=>['required','integer','min:1','max:31'],'move_reason'=>['nullable','string','max:500']]);
+        $data=$request->validate(['brand_id'=>['required','exists:brands,id'],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'credit_due_days'=>['nullable','integer','min:0','max:365'],'commission_monthly_limit'=>['required','integer','min:1','max:31'],'move_reason'=>[Rule::requiredIf((int)$request->input('brand_id') !== $agent->brand_id),'nullable','string','max:500']]);
         $id=Normalizer::identifier($data['agent_id']); $user=Normalizer::identifier($data['username']);
         if (Agent::where('agent_id_normalized',$id)->whereKeyNot($agent->id)->exists()) return back()->withErrors(['agent_id'=>'Agent ID already belongs to another platform agent.']);
         if (Agent::where('username_normalized',$user)->whereKeyNot($agent->id)->exists()) return back()->withErrors(['username'=>'Agent username already belongs to another platform agent.']);
