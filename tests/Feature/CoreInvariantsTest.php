@@ -21,7 +21,7 @@ class CoreInvariantsTest extends TestCase
 
  public function test_one_receiving_account_can_be_approved_for_multiple_brands_and_masked_match_uses_name(): void
  {
-  $b1=$this->brand('Brand A');$b2=$this->brand('Brand B');$bank=Bank::create(['code'=>'CBE','name'=>'Commercial Bank of Ethiopia','aliases'=>['CBE'],'is_active'=>true]);
+  $b1=$this->brand('Brand A');$b2=$this->brand('Brand B');$bank=Bank::where('code','CBE')->firstOrFail();
   $a=ReceivingAccount::create(['bank_id'=>$bank->id,'account_number'=>'100012346273','normalized_account_number'=>'100012346273','account_name'=>'ABC Trading PLC','normalized_account_name'=>Normalizer::name('ABC Trading PLC'),'name_aliases'=>[],'is_active'=>true]);$a->brands()->sync([$b1->id,$b2->id]);
   $match=app(ReceivingAccountMatcher::class)->match($b1,$bank,'1000***6273','ABC TRADING P.L.C.');
   $this->assertSame('matched',$match->status);$this->assertSame($a->id,$match->account?->id);
