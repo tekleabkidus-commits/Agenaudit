@@ -47,7 +47,10 @@ class AgentIdentityService
             'agent_id'=>$byId->id,
             'brand_id'=>$byId->brand_id,
             'amount'=>$amount,
+            'agent_balance_before'=>data_get($extracted, 'balance_before'),
+            'agent_balance_after'=>data_get($extracted, 'balance_after'),
             'agent_system_at'=>$at,
+            'agent_system_reference'=>data_get($extracted, 'transaction_reference'),
             'outstanding_credit_at_time'=>$outstanding,
         ]);
 
