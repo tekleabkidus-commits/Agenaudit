@@ -921,3 +921,30 @@ details[open]>.details-chevron,details[open]>summary .details-chevron{transform:
   .launch-card,.transaction-type-card{min-height:88px}
   .login-layout>.login-card{padding:26px 18px}
 }
+
+
+/* Report exceptions / bulk session controls */
+.exception-panel{
+  min-width:0;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fbfcfe
+}
+.exception-row{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #edf1f5
+}
+.exception-row:last-child{border-bottom:0}
+.exception-row>div{display:flex;flex-direction:column;min-width:0}
+.exception-row b{font-size:9.5px}
+.exception-row small{font-size:8px;color:var(--muted);margin-top:2px}
+.exception-row>a{font-size:8.5px;font-weight:800;color:var(--blue);white-space:nowrap}
+.compact-empty{padding:16px 5px}
+.revoke-user-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.revoke-user-card{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px;border:1px solid var(--line);border-radius:13px;background:#fbfcfe
+}
+@media(max-width:850px){
+  .revoke-user-grid{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  .exception-panel{padding:10px}
+  .revoke-user-card{align-items:flex-start}
+}
