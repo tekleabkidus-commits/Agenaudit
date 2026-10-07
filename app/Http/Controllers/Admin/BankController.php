@@ -17,8 +17,8 @@ class BankController extends Controller
     public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
         $request->merge(['code'=>Str::upper(trim((string)$request->input('code')))]);
-        $data=$request->validate(['name'=>['required','string','max:120'],'code'=>['required','string','max:40','unique:banks,code'],'aliases'=>['nullable','string'],'check_et_code'=>['nullable','string','max:40']]);
-        $bank=Bank::create(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'is_active'=>true]);
+        $data=$request->validate(['name'=>['required','string','max:120'],'code'=>['required','string','max:40','unique:banks,code'],'aliases'=>['nullable','string'],'check_et_code'=>['nullable','string','max:40'],'check_et_account_source'=>['nullable',Rule::in(['receiving_account','sender_account','none'])]]);
+        $bank=Bank::create(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'check_et_account_source'=>$data['check_et_account_source']??'none','is_active'=>true]);
         $audit->log('bank.created',$bank,null,$bank->toArray());
         return back()->with('success','Bank added.');
     }
@@ -27,7 +27,7 @@ class BankController extends Controller
         $request->merge(['code'=>Str::upper(trim((string)$request->input('code')))]);
         $data=$request->validate(['name'=>['required','string','max:120'],'code'=>['required','string','max:40',Rule::unique('banks','code')->ignore($bank->id)],'aliases'=>['nullable','string'],'check_et_code'=>['nullable','string','max:40']]);
         $before=$bank->toArray();
-        $bank->update(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'is_active'=>$request->boolean('is_active')]);
+        $bank->update(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'check_et_account_source'=>$data['check_et_account_source']??'none','is_active'=>$request->boolean('is_active')]);
         $audit->log('bank.updated',$bank,$before,$bank->toArray());
         return back()->with('success','Bank updated.');
     }
