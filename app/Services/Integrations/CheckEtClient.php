@@ -31,7 +31,13 @@ class CheckEtClient
         ];
 
         if ($bank?->check_et_requires_account) {
-            $payload['account_number'] = $payment->receivingAccount?->account_number;
+            $source = $bank->check_et_account_source ?: 'receiving_account';
+
+            $payload['account_number'] = match ($source) {
+                'sender_account' => $payment->sender_account,
+                'none' => null,
+                default => $payment->receivingAccount?->account_number,
+            };
         }
 
         // Deliberately no origin/domain/brand/agent/employee/purpose/amount fields.
