@@ -4,6 +4,7 @@ return [
     'device_cookie' => [
         'name' => env('DEVICE_COOKIE_NAME', 'agent_audit_device'),
         'years' => (int) env('DEVICE_COOKIE_YEARS', 25),
+        'browser_days' => (int) env('DEVICE_COOKIE_BROWSER_DAYS', 395),
         'secure' => (bool) env('DEVICE_COOKIE_SECURE', false),
     ],
     'imports' => ['max_agent_rows' => (int) env('MAX_AGENT_IMPORT_ROWS', 50000)],
