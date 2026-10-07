@@ -46,4 +46,32 @@ class CoreInvariantsTest extends TestCase
   $this->assertSame(['bank'=>'cbe','transaction_number'=>'FT123','account_number'=>'1000123456789'],$payload);
   foreach(['domain','origin','referer','brand','agent_id','employee_id','purpose','amount'] as $forbidden)$this->assertArrayNotHasKey($forbidden,$payload);
  }
+ public function test_check_et_provider_catalog_is_seeded_with_current_public_codes(): void
+ {
+  $expected=[
+   'CBE'=>'cbe','TELEBIRR'=>'telebirr','DASHEN'=>'dashen','AWASH'=>'awash','BOA'=>'boa',
+   'ZEMEN'=>'zemen','CBEBIRR'=>'cbebirr','MPESA'=>'mpesa','SIINQEE'=>'siinqee','AMHARA'=>'amhara',
+  ];
+  foreach($expected as $code=>$checkEtCode){
+   $bank=Bank::where('code',$code)->first();
+   $this->assertNotNull($bank,"Missing seeded bank {$code}");
+   $this->assertSame($checkEtCode,$bank->check_et_code);
+   $this->assertTrue($bank->check_et_enabled);
+   $this->assertTrue($bank->is_active);
+  }
+  $this->assertSame('receiving_account',Bank::where('code','CBE')->value('check_et_account_source'));
+  $this->assertSame('receiving_account',Bank::where('code','BOA')->value('check_et_account_source'));
+  $this->assertSame('sender_account',Bank::where('code','CBEBIRR')->value('check_et_account_source'));
+ }
+
+ public function test_cbe_birr_check_et_payload_uses_sender_phone_not_receiving_account(): void
+ {
+  $bank=new Bank(['code'=>'CBEBIRR','name'=>'CBE Birr','check_et_code'=>'cbebirr','check_et_requires_account'=>true,'check_et_account_source'=>'sender_account']);
+  $account=new ReceivingAccount(['account_number'=>'RECEIVER-ACCOUNT']);
+  $p=new PaymentRecord(['transaction_id_raw'=>'CB123','sender_account'=>'0911223344']);
+  $p->setRelation('toBank',$bank);$p->setRelation('receivingAccount',$account);
+  $payload=(new CheckEtClient(new SettingsService()))->buildPayload($p);
+  $this->assertSame('0911223344',$payload['account_number']);
+ }
+
 }
