@@ -121,3 +121,41 @@ Artisan::command('agent-audit:repair-admin', function () {
     $this->comment('Login now uses the exact bootstrap username/password values.');
     return self::SUCCESS;
 })->purpose('Repair the primary Admin account from Laravel Cloud bootstrap variables');
+
+
+Artisan::command('agent-audit:check-admin', function () {
+    $clean = static function ($value): string {
+        $value = trim((string) $value);
+        if (strlen($value) >= 2) {
+            $first = $value[0];
+            $last = $value[strlen($value) - 1];
+            if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                $value = substr($value, 1, -1);
+            }
+        }
+        return $value;
+    };
+
+    $username = mb_strtolower($clean(env('BOOTSTRAP_ADMIN_USERNAME', '')));
+    $password = $clean(env('BOOTSTRAP_ADMIN_PASSWORD', ''));
+
+    $user = User::query()->whereRaw('LOWER(username) = ?', [$username])->first();
+
+    if (!$user) {
+        $this->error('Configured Admin username does not exist in the database.');
+        return self::FAILURE;
+    }
+
+    $this->line('User ID: '.$user->id);
+    $this->line('Username: '.$user->username);
+    $this->line('Role: '.$user->role->value);
+    $this->line('Active: '.($user->is_active ? 'yes' : 'no'));
+
+    if (!Hash::check($password, $user->password)) {
+        $this->error('Password check failed.');
+        return self::FAILURE;
+    }
+
+    $this->info('Password check passed. These credentials are valid.');
+    return self::SUCCESS;
+})->purpose('Verify Laravel Cloud bootstrap Admin credentials against the database');
