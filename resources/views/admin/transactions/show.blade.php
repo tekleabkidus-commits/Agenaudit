@@ -1,11 +1,240 @@
-@extends('layouts.app') @section('title','Transaction '.$transaction->reference) @section('topbar','Transaction Detail') @section('content')
-<div class="page-head"><div><h2>{{ $transaction->reference }}</h2><p>{{ $transaction->type->label() }} · {{ $transaction->created_at->format('d M Y, H:i') }}</p></div><div><span class="badge {{ $transaction->status->value==='completed'?'green':($transaction->status->value==='rejected'?'red':'orange') }}">{{ str($transaction->status->value)->replace('_',' ')->upper() }}</span></div></div>
-@if($transaction->review_reason)<div class="alert warning"><b>Review:</b> {{ $transaction->review_reason }}</div>@endif @if($transaction->rejection_reason)<div class="alert error"><b>Rejected:</b> {{ $transaction->rejection_reason }}</div>@endif
-<div class="split"><div class="stack"><section class="card"><h3 class="section-title">Transaction identity</h3><dl class="detail-list"><dt>Agent</dt><dd>{{ $transaction->agent?->agent_id ?? 'Not identified' }} · {{ $transaction->agent?->username }}</dd><dt>Brand</dt><dd>{{ $transaction->brand?->name ?? 'Pending' }}</dd><dt>Employee</dt><dd>{{ $transaction->employee?->name }}</dd><dt>Agent-system amount</dt><dd>{{ $transaction->amount!==null?number_format((float)$transaction->amount,2).' ETB':'Pending extraction' }}</dd><dt>Valid bank total</dt><dd>{{ number_format((float)$transaction->valid_payment_total,2) }} ETB</dd><dt>Current agent credit</dt><dd>{{ $currentOutstanding!==null?number_format($currentOutstanding,2).' ETB':'—' }}</dd><dt>Risk</dt><dd>{{ $transaction->risk_level?->value ?? '—' }}</dd><dt>Check.et</dt><dd>{{ $transaction->external_verification_status?->value ?? '—' }}</dd></dl></section>
-<section class="card"><h3 class="section-title">Bank payments</h3>@forelse($transaction->payments as $p)<div class="evidence" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between"><b>{{ $p->fromBank?->name ?? $p->from_bank_raw ?? '?' }} → {{ $p->toBank?->name ?? $p->to_bank_raw ?? '?' }}</b><span class="badge {{ $p->internal_status->value==='valid'?'green':($p->internal_status->value==='rejected'?'red':'orange') }}">{{ $p->internal_status->value }}</span></div><dl class="detail-list" style="margin-top:12px"><dt>Amount</dt><dd>{{ number_format((float)$p->amount,2) }} ETB</dd><dt>TX ID</dt><dd class="mono">{{ $p->transaction_id_raw }}</dd><dt>Sender</dt><dd>{{ $p->sender_name }} · {{ $p->sender_account }}</dd><dt>Receiver</dt><dd>{{ $p->receiver_name }} · {{ $p->receiver_account }}</dd><dt>Account match</dt><dd>{{ $p->account_match_method ?? '—' }} @if($p->account_match_confidence)({{ round($p->account_match_confidence*100,1) }}%)@endif</dd><dt>Time difference</dt><dd>{{ $p->time_difference_minutes!==null?$p->time_difference_minutes.' min':'—' }}</dd><dt>External verification</dt><dd>{{ $p->external_status->value }}</dd></dl><a class="btn btn-sm btn-outline" href="{{ route('evidence.show',$p->evidenceFile) }}">Open evidence</a></div>@empty<div class="empty">No bank payment records yet.</div>@endforelse</section>
-<section class="card"><h3 class="section-title">Correction history</h3>@forelse($transaction->correctionRequests as $c)<div class="status-line"><span><b>{{ str($c->field_name)->replace('_',' ')->title() }}</b><div class="tiny muted">AI: {{ is_array($c->ai_value)?json_encode($c->ai_value):$c->ai_value }} → Proposed: {{ is_array($c->proposed_value)?json_encode($c->proposed_value):$c->proposed_value }}</div></span><span class="badge {{ $c->status->value==='approved'?'green':($c->status->value==='rejected'?'red':'orange') }}">{{ $c->status->value }}</span></div>@empty<div class="small muted">No correction requests.</div>@endforelse</section>
-<section class="card"><h3 class="section-title">Evidence files</h3><div class="grid grid-2">@foreach($transaction->evidenceFiles as $e)<div class="evidence"><div><b>{{ str($e->kind->value)->replace('_',' ')->title() }}</b> · <span class="badge">{{ $e->status->value }}</span></div><div class="tiny muted" style="margin:6px 0">Quality {{ $e->quality_score?round($e->quality_score*100).'%':'—' }} · Confidence {{ $e->critical_confidence?round($e->critical_confidence*100).'%':'—' }}</div><a class="btn btn-sm btn-outline" href="{{ route('evidence.show',$e) }}">View screenshot</a>
-@if($e->status===App\Enums\EvidenceStatus::PendingAdminExtraction)<details style="margin-top:10px"><summary class="btn btn-sm btn-primary">Manual extraction (AI off)</summary><form method="post" action="{{ route('admin.evidence.manual-extraction',$e) }}" class="stack" style="margin-top:10px">@csrf
-@if($e->kind===App\Enums\EvidenceKind::AgentSystem)<input class="input" name="agent_id" placeholder="Agent ID" required><input class="input" name="agent_username" placeholder="Agent username" required><input class="input" name="amount" type="number" step=".01" placeholder="Amount" required><input class="input" name="transaction_at" type="datetime-local" required><input class="input" name="brand_hint" placeholder="Brand hint (optional)">@else<input class="input" name="from_bank" placeholder="From bank" required><input class="input" name="to_bank" placeholder="To bank" required><input class="input" name="sender_account" placeholder="Sender account/phone"><input class="input" name="sender_name" placeholder="Sender name"><input class="input" name="receiver_account" placeholder="Receiver account (masked accepted)" required><input class="input" name="receiver_name" placeholder="Receiver full name" required><input class="input" name="amount" type="number" step=".01" placeholder="Amount" required><input class="input" name="transaction_id" placeholder="Bank transaction ID" required><input class="input" name="transaction_at" type="datetime-local" required>@endif<button class="btn btn-primary">Apply through validation engine</button></form></details>@endif</div>@endforeach</div></section></div>
-<aside class="stack"><section class="card"><h3 class="section-title">Admin actions</h3>@if(!in_array($transaction->status->value,['completed','rejected','cancelled']))<div class="grid grid-2" style="margin-bottom:12px"><form method="post" action="{{ route('admin.transactions.revalidate',$transaction) }}">@csrf<button class="btn btn-outline" style="width:100%">Revalidate internal rules</button></form><form method="post" action="{{ route('admin.transactions.retry-external',$transaction) }}">@csrf<button class="btn btn-outline" style="width:100%">Retry Check.et</button></form></div><form method="post" action="{{ route('admin.transactions.external-override',$transaction) }}" class="stack">@csrf<textarea class="textarea" name="note" placeholder="Reason for internal-verification override"></textarea><button class="btn btn-primary">Approve secondary-verification override</button></form><hr style="border:0;border-top:1px solid var(--line);margin:18px 0"><form method="post" action="{{ route('admin.transactions.reject',$transaction) }}" class="stack">@csrf<textarea class="textarea" name="reason" placeholder="Rejection reason" required></textarea><button class="btn btn-danger">Reject transaction</button></form>@else<div class="small muted">Finalized transactions remain immutable.</div>@endif</section><section class="card"><h3 class="section-title">Activity timeline</h3><div class="timeline">@forelse($transaction->events->sortByDesc('created_at') as $e)<div class="event"><b class="small">{{ str($e->event_type)->replace('_',' ')->title() }}</b><div class="small">{{ $e->message }}</div><div class="time">{{ $e->created_at->format('d M Y H:i:s') }} · {{ $e->actor?->name ?? 'System' }}</div></div>@empty<div class="muted small">No events recorded.</div>@endforelse</div></section></aside></div>
+@extends('layouts.app')
+@section('title','Transaction '.$transaction->reference)
+@section('topbar','Transaction Detail')
+@section('content')
+
+@php
+    $finalized = in_array($transaction->status->value,['completed','rejected','cancelled'],true);
+@endphp
+
+<div class="page-head">
+    <div>
+        <span class="eyebrow">{{ $transaction->type->label() }}</span>
+        <h2>{{ $transaction->reference }}</h2>
+        <p>{{ $transaction->created_at->format('d M Y, H:i') }} · {{ $transaction->employee?->name }}</p>
+    </div>
+    <span class="status-pill {{ match($transaction->status->value){'completed'=>'success','rejected'=>'danger','cancelled'=>'neutral','ready_for_review'=>'success','pending_employee_confirmation'=>'info',default=>'warning'} }}">
+        {{ str($transaction->status->value)->replace('_',' ')->title() }}
+    </span>
+</div>
+
+@if($transaction->review_reason)
+    <div class="alert warning"><b>Review:</b> {{ $transaction->review_reason }}</div>
+@endif
+@if($transaction->rejection_reason)
+    <div class="alert error"><b>Rejected:</b> {{ $transaction->rejection_reason }}</div>
+@endif
+
+<div class="transaction-overview-grid">
+    <section class="card identity-panel">
+        <span class="eyebrow">TRANSACTION IDENTITY</span>
+        <div class="identity-agent">
+            <div class="entity-avatar large">{{ strtoupper(substr($transaction->agent?->username ?? '?',0,1)) }}</div>
+            <div>
+                <h3>{{ $transaction->agent?->agent_id ?? 'Agent not identified' }}</h3>
+                <p>{{ $transaction->agent?->username }} @if($transaction->brand) · {{ $transaction->brand->name }} @endif</p>
+            </div>
+        </div>
+
+        <div class="detail-grid">
+            <div><span>Agent-system amount</span><b>{{ $transaction->amount!==null?number_format((float)$transaction->amount,2).' ETB':'—' }}</b></div>
+            <div><span>Valid payment total</span><b>{{ number_format((float)$transaction->valid_payment_total,2) }} ETB</b></div>
+            <div><span>Balance before</span><b>{{ $transaction->agent_balance_before!==null?number_format((float)$transaction->agent_balance_before,2).' ETB':'—' }}</b></div>
+            <div><span>Balance after</span><b>{{ $transaction->agent_balance_after!==null?number_format((float)$transaction->agent_balance_after,2).' ETB':'—' }}</b></div>
+            <div><span>Agent-system reference</span><b class="mono">{{ $transaction->agent_system_reference ?: '—' }}</b></div>
+            <div><span>Agent-system time</span><b>{{ $transaction->agent_system_at?->format('d M Y H:i:s') ?? '—' }}</b></div>
+            <div><span>Current credit</span><b>{{ $currentOutstanding!==null?number_format($currentOutstanding,2).' ETB':'—' }}</b></div>
+            <div><span>Risk</span><b>{{ str($transaction->risk_level?->value ?? '—')->title() }}</b></div>
+            <div><span>Check.et</span><b>{{ str($transaction->external_verification_status?->value ?? '—')->replace('_',' ')->title() }}</b></div>
+            <div><span>Completed</span><b>{{ $transaction->completed_at?->format('d M Y H:i:s') ?? '—' }}</b></div>
+        </div>
+    </section>
+
+    @if($transaction->issuedCreditRecord)
+        <section class="card credit-detail-panel">
+            <span class="eyebrow">CREDIT RECORD</span>
+            <h3>{{ str($transaction->issuedCreditRecord->status)->title() }}</h3>
+            <div class="detail-grid">
+                <div><span>Original</span><b>{{ number_format((float)$transaction->issuedCreditRecord->original_amount,2) }} ETB</b></div>
+                <div><span>Repaid</span><b>{{ number_format((float)$transaction->issuedCreditRecord->repaid_amount,2) }} ETB</b></div>
+                <div><span>Outstanding</span><b>{{ number_format((float)$transaction->issuedCreditRecord->outstanding_amount,2) }} ETB</b></div>
+                <div><span>Due</span><b>{{ $transaction->issuedCreditRecord->due_at?->format('d M Y') ?? 'No due date' }}</b></div>
+            </div>
+            @if($transaction->issuedCreditRecord->repaymentAllocations->count())
+                <div class="subsection">
+                    <span class="panel-label">REPAYMENTS</span>
+                    @foreach($transaction->issuedCreditRecord->repaymentAllocations as $allocation)
+                        <div class="status-line">
+                            <span>{{ $allocation->allocated_at?->format('d M Y H:i') }}</span>
+                            <span><b>{{ number_format((float)$allocation->amount,2) }} ETB</b> · <a href="{{ route('admin.transactions.show',$allocation->repaymentTransaction) }}">open</a></span>
+                        </div>
+                    @endforeach
+                </div>
+            @endif
+        </section>
+    @endif
+</div>
+
+<section class="card" style="margin-top:16px">
+    <div class="card-title-row">
+        <div><span class="eyebrow">PAYMENT EVIDENCE</span><h3>Bank Payments</h3></div>
+        <span class="count-pill">{{ $transaction->payments->count() }}</span>
+    </div>
+
+    <div class="payment-admin-grid">
+    @forelse($transaction->payments as $payment)
+        <article class="payment-card {{ $payment->internal_status->value==='rejected'?'rejected':'' }}">
+            <div class="payment-head">
+                <div>
+                    <b>{{ $payment->fromBank?->name ?? $payment->from_bank_raw ?? '?' }} <span class="arrow">→</span> {{ $payment->toBank?->name ?? $payment->to_bank_raw ?? '?' }}</b>
+                    <div class="mono tiny muted">{{ $payment->transaction_id_raw }}</div>
+                </div>
+                <span class="status-pill {{ $payment->internal_status->value==='valid'?'success':($payment->internal_status->value==='rejected'?'danger':'warning') }}">{{ str($payment->internal_status->value)->title() }}</span>
+            </div>
+
+            <div class="detail-grid compact-details">
+                <div><span>Amount</span><b>{{ number_format((float)$payment->amount,2) }} ETB</b></div>
+                <div><span>Date/time</span><b>{{ $payment->transaction_at?->format('d M Y H:i:s') ?? '—' }}</b></div>
+                <div><span>Sender</span><b>{{ $payment->sender_name ?: '—' }}</b><small>{{ $payment->sender_account ?: '—' }}</small></div>
+                <div><span>Receiver</span><b>{{ $payment->receiver_name ?: '—' }}</b><small>{{ $payment->receiver_account ?: '—' }}</small></div>
+                <div><span>Account match</span><b>{{ $payment->account_match_method ?? '—' }}</b><small>{{ $payment->account_match_confidence ? round($payment->account_match_confidence*100,1).'%' : '' }}</small></div>
+                <div><span>Time difference</span><b>{{ $payment->time_difference_minutes!==null?$payment->time_difference_minutes.' min':'—' }}</b></div>
+                <div><span>External verification</span><b>{{ str($payment->external_status->value)->replace('_',' ')->title() }}</b></div>
+                <div><span>Risk</span><b>{{ str($payment->risk_level?->value ?? '—')->title() }}</b></div>
+            </div>
+
+            @if($payment->rejection_reason)
+                <div class="alert error" style="margin-top:10px"><b>{{ str($payment->rejection_code)->replace('_',' ')->title() }}:</b> {{ $payment->rejection_reason }}</div>
+            @endif
+
+            @if($payment->duplicateOf)
+                <div class="duplicate-link-box">
+                    <span>Original duplicate match</span>
+                    <div>
+                        <b>{{ $payment->duplicateOf->transaction_id_raw }}</b>
+                        @if($payment->duplicateOf->transaction)
+                            · <a href="{{ route('admin.transactions.show',$payment->duplicateOf->transaction) }}">Open original transaction</a>
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            @if($payment->evidenceFile)
+                <a class="btn btn-sm btn-outline" style="margin-top:10px" href="{{ route('evidence.show',$payment->evidenceFile) }}" target="_blank">Open Screenshot</a>
+            @endif
+        </article>
+    @empty
+        <div class="empty">No bank payment records yet.</div>
+    @endforelse
+    </div>
+</section>
+
+<section class="card" style="margin-top:16px">
+    <div class="card-title-row">
+        <div><span class="eyebrow">SOURCE FILES</span><h3>Evidence</h3></div>
+        <span class="count-pill">{{ $transaction->evidenceFiles->count() }}</span>
+    </div>
+
+    <div class="evidence-gallery">
+    @foreach($transaction->evidenceFiles as $evidence)
+        <article class="evidence-tile">
+            <a href="{{ route('evidence.show',$evidence) }}" target="_blank" class="evidence-thumb">
+                <img src="{{ route('evidence.show',$evidence) }}" alt="Evidence">
+            </a>
+            <div class="evidence-meta">
+                <b>{{ str($evidence->kind->value)->replace('_',' ')->title() }}</b>
+                <span class="status-pill {{ $evidence->status->value==='extracted'?'success':($evidence->status->value==='failed'?'danger':'warning') }}">{{ str($evidence->status->value)->replace('_',' ')->title() }}</span>
+                <small>Quality {{ $evidence->quality_score?round($evidence->quality_score*100).'%':'—' }} · Confidence {{ $evidence->critical_confidence?round($evidence->critical_confidence*100).'%':'—' }}</small>
+                @if($evidence->employee_confirmed_at)<small>Employee confirmed {{ $evidence->employee_confirmed_at->format('d M H:i') }}</small>@endif
+            </div>
+
+            @if($evidence->status===App\Enums\EvidenceStatus::PendingAdminExtraction)
+                <details class="manual-extraction">
+                    <summary class="btn btn-sm btn-primary">Manual Extraction</summary>
+                    <form method="post" action="{{ route('admin.evidence.manual-extraction',$evidence) }}" class="stack" style="margin-top:10px">
+                        @csrf
+                        @if($evidence->kind===App\Enums\EvidenceKind::AgentSystem)
+                            <input class="input" name="agent_id" placeholder="Agent ID" required>
+                            <input class="input" name="agent_username" placeholder="Agent username" required>
+                            <input class="input" name="amount" type="number" step=".01" placeholder="Amount" required>
+                            <input class="input" name="transaction_at" type="datetime-local" required>
+                            <input class="input" name="brand_hint" placeholder="Brand hint (optional)">
+                        @else
+                            <input class="input" name="from_bank" placeholder="From bank" required>
+                            <input class="input" name="to_bank" placeholder="To bank" required>
+                            <input class="input" name="sender_account" placeholder="Sender account/phone">
+                            <input class="input" name="sender_name" placeholder="Sender name">
+                            <input class="input" name="receiver_account" placeholder="Receiver account (masked accepted)" required>
+                            <input class="input" name="receiver_name" placeholder="Receiver full name" required>
+                            <input class="input" name="amount" type="number" step=".01" placeholder="Amount" required>
+                            <input class="input" name="transaction_id" placeholder="Bank transaction ID" required>
+                            <input class="input" name="transaction_at" type="datetime-local" required>
+                        @endif
+                        <button class="btn btn-primary">Apply Through Validation Engine</button>
+                    </form>
+                </details>
+            @endif
+        </article>
+    @endforeach
+    </div>
+</section>
+
+<div class="grid grid-2" style="margin-top:16px">
+    <section class="card">
+        <div class="card-title-row"><div><span class="eyebrow">CHANGE CONTROL</span><h3>Correction History</h3></div></div>
+        @forelse($transaction->correctionRequests as $correction)
+            <div class="correction-line">
+                <div>
+                    <b>{{ str($correction->field_name)->replace('_',' ')->title() }}</b>
+                    <small>AI: {{ is_array($correction->ai_value)?json_encode($correction->ai_value):$correction->ai_value }} → Proposed: {{ is_array($correction->proposed_value)?json_encode($correction->proposed_value):$correction->proposed_value }}</small>
+                </div>
+                <span class="status-pill {{ $correction->status->value==='approved'?'success':($correction->status->value==='rejected'?'danger':'warning') }}">{{ str($correction->status->value)->replace('_',' ')->title() }}</span>
+            </div>
+        @empty
+            <div class="empty">No correction requests.</div>
+        @endforelse
+    </section>
+
+    <section class="card">
+        <div class="card-title-row"><div><span class="eyebrow">AUDIT TRAIL</span><h3>Activity Timeline</h3></div></div>
+        <div class="timeline">
+            @forelse($transaction->events->sortByDesc('created_at') as $event)
+                <div class="event">
+                    <b>{{ str($event->event_type)->replace('_',' ')->title() }}</b>
+                    <div class="small">{{ $event->message }}</div>
+                    <div class="time">{{ $event->created_at->format('d M Y H:i:s') }} · {{ $event->actor?->name ?? 'System' }}</div>
+                </div>
+            @empty
+                <div class="empty">No events recorded.</div>
+            @endforelse
+        </div>
+    </section>
+</div>
+
+@if(!$finalized)
+<section class="card admin-action-bar" style="margin-top:16px">
+    <div>
+        <span class="eyebrow">ADMIN ACTIONS</span>
+        <h3>Review Controls</h3>
+        <p>Internal hard rules remain authoritative. External override affects only secondary verification.</p>
+    </div>
+
+    <div class="admin-action-grid">
+        <form method="post" action="{{ route('admin.transactions.revalidate',$transaction) }}">@csrf<button class="btn btn-outline">Revalidate Internal Rules</button></form>
+        <form method="post" action="{{ route('admin.transactions.retry-external',$transaction) }}">@csrf<button class="btn btn-outline">Retry Check.et</button></form>
+
+        <form method="post" action="{{ route('admin.transactions.external-override',$transaction) }}" class="stack action-form">
+            @csrf
+            <textarea class="textarea" name="note" placeholder="Reason for external-verification override" required></textarea>
+            <button class="btn btn-primary">Approve Secondary-Verification Override</button>
+        </form>
+
+        <form method="post" action="{{ route('admin.transactions.reject',$transaction) }}" class="stack action-form">
+            @csrf
+            <textarea class="textarea" name="reason" placeholder="Rejection reason" required></textarea>
+            <button class="btn btn-danger">Reject Transaction</button>
+        </form>
+    </div>
+</section>
+@endif
 @endsection
