@@ -1,0 +1,8 @@
+<?php
+namespace App\Http\Controllers\Admin;
+use App\Enums\CorrectionStatus; use App\Http\Controllers\Controller; use App\Models\CorrectionRequest; use App\Services\Transactions\CorrectionService; use Illuminate\Http\RedirectResponse; use Illuminate\Http\Request; use Illuminate\View\View; use Throwable;
+class CorrectionReviewController extends Controller {
+ public function index(Request $request): View { $q=CorrectionRequest::with(['transaction.agent','transaction.brand','requester','paymentRecord','evidenceFile'])->latest(); if($request->filled('status'))$q->where('status',$request->input('status')); return view('admin.corrections.index',['requests'=>$q->paginate(30)->withQueryString(),'statuses'=>CorrectionStatus::cases()]); }
+ public function approve(Request $request, CorrectionRequest $correctionRequest, CorrectionService $service): RedirectResponse { $data=$request->validate(['note'=>['nullable','string','max:1000']]); try{$service->approve($correctionRequest,$request->user(),$data['note']??null);}catch(Throwable $e){return back()->withErrors(['correction'=>$e->getMessage()]);} return back()->with('success','Correction approved and transaction recalculated.'); }
+ public function reject(Request $request, CorrectionRequest $correctionRequest, CorrectionService $service): RedirectResponse { $data=$request->validate(['note'=>['required','string','min:3','max:1000'],'needs_screenshot'=>['nullable','boolean']]); try{$service->reject($correctionRequest,$request->user(),$data['note'],$request->boolean('needs_screenshot'));}catch(Throwable $e){return back()->withErrors(['correction'=>$e->getMessage()]);} return back()->with('success','Correction request rejected.'); }
+}
