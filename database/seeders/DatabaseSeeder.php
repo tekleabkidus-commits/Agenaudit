@@ -40,19 +40,27 @@ class DatabaseSeeder extends Seeder
         }
 
         foreach ([
-            ['CBE', 'Commercial Bank of Ethiopia', 'cbe', true],
-            ['AWASH', 'Awash Bank', 'awash', false],
-            ['TELEBIRR', 'Telebirr', 'telebirr', false],
-            ['MPESA', 'M-Pesa', 'mpesa', false],
-        ] as [$code, $name, $checkEtCode, $requiresAccount]) {
+            ['CBE', 'Commercial Bank of Ethiopia', 'cbe', true, 'receiving_account'],
+            ['TELEBIRR', 'Telebirr', 'telebirr', false, 'none'],
+            ['DASHEN', 'Dashen Bank', 'dashen', false, 'none'],
+            ['AWASH', 'Awash Bank', 'awash', false, 'none'],
+            ['BOA', 'Bank of Abyssinia', 'boa', true, 'receiving_account'],
+            ['ZEMEN', 'Zemen Bank', 'zemen', false, 'none'],
+            ['CBEBIRR', 'CBE Birr', 'cbebirr', true, 'sender_account'],
+            ['MPESA', 'M-Pesa Ethiopia', 'mpesa', false, 'none'],
+            ['SIINQEE', 'Siinqee Bank', 'siinqee', false, 'none'],
+            ['AMHARA', 'Amhara Bank', 'amhara', false, 'none'],
+        ] as [$code, $name, $checkEtCode, $requiresAccount, $accountSource]) {
             Bank::firstOrCreate(['code' => $code], [
                 'name' => $name,
                 'aliases' => [$code, $name],
                 'check_et_code' => $checkEtCode,
                 'check_et_enabled' => true,
                 'check_et_requires_account' => $requiresAccount,
+                'check_et_account_source' => $accountSource,
                 'is_active' => true,
             ]);
+        }
         }
     }
 }
