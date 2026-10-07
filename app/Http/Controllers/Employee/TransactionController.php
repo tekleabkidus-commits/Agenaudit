@@ -21,7 +21,14 @@ class TransactionController extends Controller
 {
     public function index(Request $request): View
     {
-        $transactions = Transaction::with(['agent','brand'])->where('employee_id',$request->user()->id)->latest()->paginate(25);
+        $brandIds = $request->user()->brands()->pluck('brands.id');
+        $transactions = Transaction::with(['agent','brand'])
+            ->where('employee_id',$request->user()->id)
+            ->where(function ($q) use ($brandIds) {
+                $q->whereNull('brand_id')->orWhereIn('brand_id',$brandIds);
+            })
+            ->latest()
+            ->paginate(25);
         return view('employee.transactions.index', compact('transactions'));
     }
 
