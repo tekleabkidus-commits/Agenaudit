@@ -36,12 +36,15 @@ class PaymentVerificationService
         if (!$normalizedReference) throw new ClearerScreenshotRequiredException('transaction_id_unreadable', 'Bank transaction ID is not readable.');
 
         $existing = PaymentRecord::where('normalized_transaction_id', $normalizedReference)->first();
-        if ($existing && $existing->transaction_id !== $transaction->id) {
-            $this->createRejectedDuplicateRecord($transaction, $evidence, $extracted, $rawReference);
-            throw new HardRejectException('duplicate_transaction_id', 'This bank transaction ID has already been used anywhere on the platform.');
-        }
-        if ($existing && $existing->transaction_id === $transaction->id && $existing->internal_status !== PaymentValidationStatus::Review) {
-            throw new HardRejectException('duplicate_transaction_id', 'The same bank transaction ID was attached more than once.');
+
+        if ($existing && $existing->evidence_file_id !== $evidence->id) {
+            return $this->createRejectedDuplicateRecord(
+                $transaction,
+                $evidence,
+                $extracted,
+                $rawReference,
+                $existing
+            );
         }
 
         $toBankRaw = (string) data_get($extracted, 'to_bank');
@@ -82,16 +85,29 @@ class PaymentVerificationService
                 $payment = PaymentRecord::create($attributes)->load(['toBank','receivingAccount']);
             }
         } catch (QueryException $e) {
-            if (str_contains(strtolower($e->getMessage()), 'unique')) throw new HardRejectException('duplicate_transaction_id', 'This bank transaction ID is already reserved on the platform.');
+            if (str_contains(strtolower($e->getMessage()), 'unique')) {
+                $original = PaymentRecord::where('normalized_transaction_id', $normalizedReference)->first();
+                if ($original) {
+                    return $this->createRejectedDuplicateRecord(
+                        $transaction,
+                        $evidence,
+                        $extracted,
+                        $rawReference,
+                        $original
+                    );
+                }
+            }
             throw $e;
         }
 
         if ($match->status === 'no_match') {
             $payment->update([
-                'internal_status'=>PaymentValidationStatus::Rejected,'external_status'=>ExternalVerificationStatus::NotRequired,
-                'rejection_code'=>'receiving_account_mismatch','rejection_reason'=>$match->reason,
+                'internal_status'=>PaymentValidationStatus::Rejected,
+                'external_status'=>ExternalVerificationStatus::NotRequired,
+                'rejection_code'=>'receiving_account_mismatch',
+                'rejection_reason'=>$match->reason,
             ]);
-            throw new HardRejectException('receiving_account_mismatch', $match->reason ?? 'Receiving account is not approved.');
+            return $payment->fresh();
         }
         if (in_array($match->status, ['ambiguous','insufficient'], true)) {
             $payment->update([
@@ -163,17 +179,36 @@ class PaymentVerificationService
         return $payment->fresh();
     }
 
-    private function createRejectedDuplicateRecord(Transaction $transaction, EvidenceFile $evidence, array $extracted, string $rawReference): void
-    {
-        PaymentRecord::create([
-            'transaction_id'=>$transaction->id,'evidence_file_id'=>$evidence->id,
-            'from_bank_raw'=>data_get($extracted,'from_bank'),'to_bank_raw'=>data_get($extracted,'to_bank'),
-            'sender_account'=>data_get($extracted,'sender_account'),'sender_name'=>data_get($extracted,'sender_name'),
-            'receiver_account'=>data_get($extracted,'receiver_account'),'receiver_name'=>data_get($extracted,'receiver_name'),
-            'amount'=>(float) data_get($extracted,'amount',0),'transaction_id_raw'=>$rawReference,
-            'normalized_transaction_id'=>null,'transaction_at'=>data_get($extracted,'transaction_at'),
-            'internal_status'=>PaymentValidationStatus::Rejected,'external_status'=>ExternalVerificationStatus::NotRequired,
-            'rejection_code'=>'duplicate_transaction_id','rejection_reason'=>'Transaction ID already exists on platform.',
-        ]);
+    private function createRejectedDuplicateRecord(
+        Transaction $transaction,
+        EvidenceFile $evidence,
+        array $extracted,
+        string $rawReference,
+        PaymentRecord $original
+    ): PaymentRecord {
+        $record = PaymentRecord::updateOrCreate(
+            ['evidence_file_id'=>$evidence->id],
+            [
+                'transaction_id'=>$transaction->id,
+                'from_bank_raw'=>data_get($extracted,'from_bank'),
+                'to_bank_raw'=>data_get($extracted,'to_bank'),
+                'sender_account'=>data_get($extracted,'sender_account'),
+                'sender_name'=>data_get($extracted,'sender_name'),
+                'receiver_account'=>data_get($extracted,'receiver_account'),
+                'receiver_name'=>data_get($extracted,'receiver_name'),
+                'amount'=>(float) data_get($extracted,'amount',0),
+                'transaction_id_raw'=>$rawReference,
+                'normalized_transaction_id'=>null,
+                'duplicate_of_payment_id'=>$original->id,
+                'transaction_at'=>data_get($extracted,'transaction_at'),
+                'internal_status'=>PaymentValidationStatus::Rejected,
+                'external_status'=>ExternalVerificationStatus::NotRequired,
+                'rejection_code'=>'duplicate_transaction_id',
+                'rejection_reason'=>'Transaction ID already exists on platform.',
+            ]
+        );
+
+        return $record->fresh(['duplicateOf.transaction','evidenceFile']);
     }
+
 }
