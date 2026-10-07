@@ -3,13 +3,20 @@
   "name": "private/agent-audit-platform",
   "type": "project",
   "description": "Laravel agent balance audit, reconciliation and evidence platform.",
-  "keywords": ["laravel", "audit", "reconciliation", "agents", "payments"],
+  "keywords": [
+    "laravel",
+    "audit",
+    "reconciliation",
+    "agents",
+    "payments"
+  ],
   "license": "proprietary",
   "require": {
     "php": "^8.4",
     "laravel/framework": "^12.0",
     "laravel/tinker": "^3.0",
-    "openspout/openspout": "^5.12"
+    "openspout/openspout": "^5.12",
+    "league/flysystem-aws-s3-v3": "^3.0"
   },
   "require-dev": {
     "fakerphp/faker": "^1.23",
