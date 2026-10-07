@@ -1,3 +1,154 @@
-@extends('layouts.app') @section('title','Users & Permissions') @section('topbar','Users & Permissions') @section('content')
-<div class="page-head"><div><h2>Admin & Employee access</h2><p>Employees must be assigned to one or more brands. Admins remain platform-wide. Correction rights are assigned per employee. Receiver bank/account/name remain permanently non-correctable.</p></div></div><div class="grid grid-2"><section class="card"><h3 class="section-title">Create user</h3><form method="post" action="{{ route('admin.employees.store') }}" class="stack">@csrf<div class="form-grid"><div class="field"><label>Name</label><input class="input" name="name" required></div><div class="field"><label>Username</label><input class="input" name="username" required></div><div class="field"><label>Password</label><input class="input" type="password" name="password" required></div><div class="field"><label>Role</label><select class="select" name="role"><option value="employee">Employee</option><option value="admin">Admin</option></select></div></div><div class="field"><label>Assigned brands</label><div class="checkboxes">@foreach($brands as $b)<label class="check"><input type="checkbox" name="brand_ids[]" value="{{ $b->id }}" @checked(in_array($b->id, old('brand_ids', [])))> {{ $b->name }}</label>@endforeach</div><div class="tiny muted">Required for Employees. Choose one or multiple brands. Admin users have access to all brands.</div></div><div class="field"><label>Allowed correction requests</label><div class="checkboxes">@foreach($correctionFields as $f)<label class="check"><input type="checkbox" name="correction_fields[]" value="{{ $f }}"> {{ str($f)->replace('_',' ') }}</label>@endforeach</div></div><button class="btn btn-primary">Create user</button></form></section><section class="card"><h3 class="section-title">Existing users</h3>@foreach($users as $u)<details class="evidence" style="margin-bottom:10px"><summary style="cursor:pointer"><b>{{ $u->name }}</b> · {{ $u->username }} <span class="badge">{{ $u->role->value }}</span> <span class="badge {{ $u->is_active?'green':'red' }}">{{ $u->is_active?'active':'disabled' }}</span></summary><form method="post" action="{{ route('admin.employees.update',$u) }}" class="stack" style="margin-top:14px">@csrf @method('PUT')<div class="form-grid"><input class="input" name="name" value="{{ $u->name }}"><input class="input" name="username" value="{{ $u->username }}"><select class="select" name="role"><option value="employee" @selected($u->role->value==='employee')>Employee</option><option value="admin" @selected($u->role->value==='admin')>Admin</option></select><input class="input" type="password" name="password" placeholder="New password (optional)"></div><div class="field"><label>Assigned brands</label><div class="checkboxes">@foreach($brands as $b)<label class="check"><input type="checkbox" name="brand_ids[]" value="{{ $b->id }}" @checked($u->brands->contains('id',$b->id))> {{ $b->name }}</label>@endforeach</div><div class="tiny muted">Employees can transact only for assigned brands. Admin users are unrestricted.</div></div><div class="checkboxes">@foreach($correctionFields as $f)<label class="check"><input type="checkbox" name="correction_fields[]" value="{{ $f }}" @checked(in_array($f,$u->permissions?->correction_fields??[],true))> {{ str($f)->replace('_',' ') }}</label>@endforeach</div><label class="check"><input type="checkbox" name="is_active" value="1" @checked($u->is_active)> Active</label><button class="btn">Save user</button></form></details>@endforeach{{ $users->links() }}</section></div>
+@extends('layouts.app')
+@section('title','Users & Permissions')
+@section('topbar','Users & Permissions')
+@section('content')
+
+<div class="page-head">
+    <div>
+        <span class="eyebrow">ACCESS CONTROL</span>
+        <h2>Users & Permissions</h2>
+        <p>Employees can be assigned to one or multiple brands. Admins remain platform-wide. Correction permissions are request-only and individually controlled.</p>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <section class="card elevated">
+        <div class="card-title-row">
+            <div><span class="eyebrow">CREATE ACCESS</span><h3>New User</h3></div>
+            <span class="icon-bubble">＋</span>
+        </div>
+
+        <form method="post" action="{{ route('admin.employees.store') }}" class="stack">
+            @csrf
+
+            <div class="form-grid">
+                <div class="field"><label>Full name</label><input class="input" name="name" value="{{ old('name') }}" required></div>
+                <div class="field"><label>Username</label><input class="input" name="username" value="{{ old('username') }}" required></div>
+                <div class="field"><label>Password</label><input class="input" type="password" name="password" required></div>
+                <div class="field">
+                    <label>Role</label>
+                    <select class="select" name="role">
+                        <option value="employee" @selected(old('role','employee')==='employee')>Employee</option>
+                        <option value="admin" @selected(old('role')==='admin')>Admin</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="permission-panel">
+                <div class="panel-label">BRAND ACCESS</div>
+                <div class="checkbox-card-grid">
+                    @foreach($brands as $brand)
+                        <label class="checkbox-card">
+                            <input type="checkbox" name="brand_ids[]" value="{{ $brand->id }}" @checked(in_array($brand->id,old('brand_ids',[])))>
+                            <span class="checkbox-mark">✓</span>
+                            <span><b>{{ $brand->name }}</b><small>Allow Employee transactions for this brand</small></span>
+                        </label>
+                    @endforeach
+                </div>
+                <div class="tiny muted" style="margin-top:8px">Employees require at least one active brand. Admin users automatically have access to all brands.</div>
+            </div>
+
+            <div class="permission-panel">
+                <div class="panel-label">CORRECTION REQUEST PERMISSIONS</div>
+                <div class="checkbox-card-grid">
+                    @foreach($correctionFields as $field)
+                        <label class="checkbox-card compact">
+                            <input type="checkbox" name="correction_fields[]" value="{{ $field }}">
+                            <span class="checkbox-mark">✓</span>
+                            <span><b>{{ str($field)->replace('_',' ')->title() }}</b></span>
+                        </label>
+                    @endforeach
+                </div>
+                <div class="alert info" style="margin-top:10px;margin-bottom:0">These permissions only allow an Employee to <b>request</b> a correction. Admin approval is still required. Receiver bank/account/name and duplicate protection remain non-correctable.</div>
+            </div>
+
+            <button class="btn btn-primary btn-lg">Create User</button>
+        </form>
+    </section>
+
+    <section class="card">
+        <div class="card-title-row">
+            <div><span class="eyebrow">DIRECTORY</span><h3>Existing Users</h3></div>
+            <span class="count-pill">{{ $users->total() }}</span>
+        </div>
+
+        <div class="user-admin-list">
+            @forelse($users as $user)
+                <details class="user-admin-card">
+                    <summary>
+                        <span class="entity-avatar">{{ strtoupper(substr($user->name,0,1)) }}</span>
+                        <span class="user-summary-copy">
+                            <b>{{ $user->name }}</b>
+                            <small>{{ $user->username }} · {{ ucfirst($user->role->value) }}</small>
+                            <span class="user-brand-line">
+                                @if($user->isAdmin())
+                                    All brands
+                                @else
+                                    {{ $user->brands->pluck('name')->join(', ') ?: 'No brand assigned' }}
+                                @endif
+                            </span>
+                        </span>
+                        <span class="status-pill {{ $user->is_active?'success':'danger' }}">{{ $user->is_active?'Active':'Disabled' }}</span>
+                        <span class="details-chevron">⌄</span>
+                    </summary>
+
+                    <form method="post" action="{{ route('admin.employees.update',$user) }}" class="stack user-edit-form">
+                        @csrf
+                        @method('PUT')
+
+                        <div class="form-grid">
+                            <div class="field"><label>Name</label><input class="input" name="name" value="{{ $user->name }}"></div>
+                            <div class="field"><label>Username</label><input class="input" name="username" value="{{ $user->username }}"></div>
+                            <div class="field">
+                                <label>Role</label>
+                                <select class="select" name="role">
+                                    <option value="employee" @selected($user->role->value==='employee')>Employee</option>
+                                    <option value="admin" @selected($user->role->value==='admin')>Admin</option>
+                                </select>
+                            </div>
+                            <div class="field"><label>New password</label><input class="input" type="password" name="password" placeholder="Leave blank to keep current"></div>
+                        </div>
+
+                        <div class="permission-panel">
+                            <div class="panel-label">ASSIGNED BRANDS</div>
+                            <div class="checkbox-card-grid">
+                                @foreach($brands as $brand)
+                                    <label class="checkbox-card compact">
+                                        <input type="checkbox" name="brand_ids[]" value="{{ $brand->id }}" @checked($user->brands->contains('id',$brand->id))>
+                                        <span class="checkbox-mark">✓</span>
+                                        <span><b>{{ $brand->name }}</b></span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="permission-panel">
+                            <div class="panel-label">CORRECTION REQUESTS</div>
+                            <div class="checkbox-card-grid">
+                                @foreach($correctionFields as $field)
+                                    <label class="checkbox-card compact">
+                                        <input type="checkbox" name="correction_fields[]" value="{{ $field }}" @checked(in_array($field,$user->permissions?->correction_fields??[],true))>
+                                        <span class="checkbox-mark">✓</span>
+                                        <span><b>{{ str($field)->replace('_',' ')->title() }}</b></span>
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <label class="setting-row">
+                            <span><b>User active</b><small>Disabled users cannot sign in or use remembered-device sessions.</small></span>
+                            <span class="modern-switch compact"><input type="checkbox" name="is_active" value="1" @checked($user->is_active)><span class="modern-switch-ui"></span></span>
+                        </label>
+
+                        <button class="btn btn-primary">Save User</button>
+                    </form>
+                </details>
+            @empty
+                <div class="empty">No users found.</div>
+            @endforelse
+        </div>
+
+        {{ $users->links() }}
+    </section>
+</div>
 @endsection
