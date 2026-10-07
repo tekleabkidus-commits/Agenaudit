@@ -25,12 +25,18 @@ class TransactionController extends Controller
         return view('employee.transactions.index', compact('transactions'));
     }
 
-    public function create(CreditLedgerService $credits): View
+    public function create(Request $request, CreditLedgerService $credits): View
     {
-        $outstandingAgents = $credits->agentsWithOutstanding()->values();
+        $user = $request->user()->load('brands');
+        $allowedBrandIds = $user->brands->pluck('id');
+        $outstandingAgents = $credits->agentsWithOutstanding()
+            ->filter(fn ($row) => $allowedBrandIds->contains($row['agent']->brand_id))
+            ->values();
+
         return view('employee.transactions.create', [
             'types'=>TransactionType::cases(),
             'outstandingAgents'=>$outstandingAgents,
+            'assignedBrands'=>$user->brands,
         ]);
     }
 
@@ -45,6 +51,7 @@ class TransactionController extends Controller
         if ($type === TransactionType::CreditRepayment) {
             $request->validate(['repayment_agent_id'=>['required','integer','exists:agents,id']]);
             $agent = Agent::findOrFail($validated['repayment_agent_id']);
+            abort_unless($request->user()->canAccessBrand($agent->brand_id), 403, 'You are not assigned to this agent brand.');
         }
         $transaction = $workflow->create($request->user(), $type, $agent);
         return redirect()->route('employee.transactions.show',$transaction);
