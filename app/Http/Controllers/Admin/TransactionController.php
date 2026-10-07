@@ -14,7 +14,13 @@ class TransactionController extends Controller
     }
     public function show(Transaction $transaction, CreditLedgerService $credits): View
     {
-        $transaction->load(['agent.brand','brand','employee','payments.fromBank','payments.toBank','payments.receivingAccount','payments.evidenceFile','evidenceFiles','events.actor','correctionRequests.requester','correctionRequests.reviewer','confirmations']);
+        $transaction->load([
+            'agent.brand','brand','employee',
+            'payments.fromBank','payments.toBank','payments.receivingAccount','payments.evidenceFile','payments.duplicateOf.transaction',
+            'evidenceFiles','events.actor',
+            'correctionRequests.requester','correctionRequests.reviewer',
+            'confirmations','issuedCreditRecord.repaymentAllocations.repaymentTransaction'
+        ]);
         return view('admin.transactions.show',['transaction'=>$transaction,'currentOutstanding'=>$transaction->agent?$credits->outstanding($transaction->agent):null]);
     }
     public function externalOverride(Request $request, Transaction $transaction, TransactionWorkflowService $workflow): RedirectResponse
