@@ -21,7 +21,7 @@ class ReceivingAccountController extends Controller
     }
     public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
-        $data=$request->validate(['bank_id'=>['required','exists:banks,id'],'account_number'=>['required','string','max:120'],'account_name'=>['required','string','max:160'],'name_aliases'=>['nullable','string'],'brand_ids'=>['required','array','min:1'],'brand_ids.*'=>['integer','exists:brands,id']]);
+        $data=$request->validate(['bank_id'=>['required',Rule::exists('banks','id')->where(fn($q)=>$q->where('is_active',true))],'account_number'=>['required','string','max:120'],'account_name'=>['required','string','max:160'],'name_aliases'=>['nullable','string'],'brand_ids'=>['required','array','min:1'],'brand_ids.*'=>['integer',Rule::exists('brands','id')->where(fn($q)=>$q->where('is_active',true))]]);
         $normalized=Normalizer::account($data['account_number']);
         if (ReceivingAccount::where('bank_id',$data['bank_id'])->where('normalized_account_number',$normalized)->exists()) return back()->withErrors(['account_number'=>'This receiving account already exists for the selected bank.'])->withInput();
         $account=ReceivingAccount::create(['bank_id'=>$data['bank_id'],'account_number'=>$data['account_number'],'normalized_account_number'=>$normalized,'account_name'=>$data['account_name'],'normalized_account_name'=>Normalizer::name($data['account_name']),'name_aliases'=>$this->aliases($data['name_aliases']??null),'is_active'=>true]);
