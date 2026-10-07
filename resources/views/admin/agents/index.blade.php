@@ -2,71 +2,103 @@
 @section('title','Agents')
 @section('topbar','Agents')
 @section('content')
+
 <div class="page-head">
     <div>
-        <h2>Agent master data</h2>
-        <p>Agent ID and username are globally unique because all brands share the same agent system.</p>
+        <span class="eyebrow">MASTER DATA</span>
+        <h2>Agent Directory</h2>
+        <p>Agent ID and username are globally unique across every brand.</p>
     </div>
-    <div class="filters">
-        <a class="btn" href="#add-single-agent">+ Add Single Agent</a>
-        <a class="btn btn-primary" href="{{ route('admin.agent-imports.index') }}">Import Excel</a>
+    <div class="page-actions">
+        <a class="btn btn-outline" href="{{ route('admin.commissions.index') }}">Commission Controls</a>
+        <a class="btn btn-outline" href="{{ route('admin.agent-imports.index') }}">Bulk Import</a>
+        <a class="btn btn-primary" href="#add-single-agent">+ Add Agent</a>
     </div>
 </div>
 
-<div class="card">
+<div class="card filter-card">
     <form class="filters" method="get">
-        <input class="input" name="q" value="{{ request('q') }}" placeholder="Agent ID or username">
+        <input class="input" name="q" value="{{ request('q') }}" placeholder="Search Agent ID or username">
         <select class="select" name="brand">
             <option value="">All brands</option>
-            @foreach($brands as $b)
-                <option value="{{ $b->id }}" @selected(request('brand')==$b->id)>{{ $b->name }}</option>
+            @foreach($brands as $brand)
+                <option value="{{ $brand->id }}" @selected(request('brand')==$brand->id)>{{ $brand->name }}</option>
             @endforeach
         </select>
-        <button class="btn">Filter</button>
+        <button class="btn btn-primary">Filter</button>
+        @if(request()->hasAny(['q','brand']))<a class="btn btn-ghost" href="{{ route('admin.agents.index') }}">Reset</a>@endif
     </form>
 </div>
 
 <div class="grid grid-2" style="margin-top:16px">
-    <section class="card" id="add-single-agent">
-        <h3 class="section-title">Add single agent</h3>
-        <p class="tiny muted">Use this form when adding one agent manually. No Excel file is required.</p>
+    <section class="card elevated" id="add-single-agent">
+        <div class="card-title-row">
+            <div><span class="eyebrow">QUICK CREATE</span><h3>Add Single Agent</h3></div>
+            <span class="icon-bubble">+</span>
+        </div>
+        <p class="small muted">For bulk creation, use the Excel importer. This form creates one agent immediately.</p>
+
         <form class="stack" method="post" action="{{ route('admin.agents.store') }}">
             @csrf
             <div class="form-grid">
                 <div class="field">
                     <label>Brand</label>
                     <select class="select" name="brand_id" required>
-                        @foreach($brands as $b)<option value="{{ $b->id }}">{{ $b->name }}</option>@endforeach
+                        @foreach($brands as $brand)<option value="{{ $brand->id }}">{{ $brand->name }}</option>@endforeach
                     </select>
                 </div>
                 <div class="field"><label>Agent ID</label><input class="input" name="agent_id" required></div>
                 <div class="field"><label>Agent username</label><input class="input" name="username" required></div>
-                <div class="field"><label>Credit limit (optional)</label><input class="input" type="number" step="0.01" min="0" name="credit_limit"></div>
-                <div class="field"><label>Commission uses/month</label><input class="input" type="number" min="1" max="31" name="commission_monthly_limit" value="2"></div>
+                <div class="field"><label>Credit limit</label><input class="input" type="number" step=".01" min="0" name="credit_limit" placeholder="Unlimited if blank"></div>
+                <div class="field"><label>Credit due days</label><input class="input" type="number" min="0" max="365" name="credit_due_days" placeholder="Use platform default"></div>
+                <div class="field"><label>Commission uses / month</label><input class="input" type="number" min="1" max="31" name="commission_monthly_limit" value="2"></div>
             </div>
-            <div class="checkboxes">
-                <label class="check"><input type="checkbox" name="credit_enabled" value="1" checked> Credit enabled</label>
-                <label class="check"><input type="checkbox" name="commission_enabled" value="1"> Commission deposit enabled</label>
+
+            <div class="toggle-grid">
+                <label class="setting-row">
+                    <span><b>Credit enabled</b><small>Allow Give Credit for this agent.</small></span>
+                    <span class="modern-switch compact"><input type="checkbox" name="credit_enabled" value="1" checked><span class="modern-switch-ui"></span></span>
+                </label>
+                <label class="setting-row">
+                    <span><b>Commission Deposit</b><small>Admin-controlled. Employee can use it only while ON.</small></span>
+                    <span class="modern-switch compact"><input type="checkbox" name="commission_enabled" value="1"><span class="modern-switch-ui"></span></span>
+                </label>
             </div>
-            <button class="btn btn-primary">Add Agent</button>
+
+            <button class="btn btn-primary btn-lg">Create Agent</button>
         </form>
     </section>
 
     <section class="card">
-        <h3 class="section-title">Agents</h3>
+        <div class="card-title-row">
+            <div><span class="eyebrow">ACTIVE DIRECTORY</span><h3>Agents</h3></div>
+            <span class="count-pill">{{ $agents->total() }}</span>
+        </div>
+
         <div class="table-wrap">
-            <table class="table">
-                <thead><tr><th>Agent</th><th>Brand</th><th>Credit</th><th>Commission</th><th></th></tr></thead>
+            <table class="table modern-table">
+                <thead><tr><th>Agent</th><th>Brand</th><th>Outstanding credit</th><th>Commission</th><th></th></tr></thead>
                 <tbody>
-                @foreach($agents as $a)
+                @forelse($agents as $agent)
                     <tr>
-                        <td><b>{{ $a->agent_id }}</b><div class="tiny muted">{{ $a->username }}</div></td>
-                        <td>{{ $a->brand->name }}</td>
-                        <td>{{ number_format($a->outstanding_credit,2) }} ETB</td>
-                        <td><span class="badge {{ $a->commission_enabled?'green':'' }}">{{ $a->commission_enabled?'On':'Off' }}</span></td>
-                        <td><a class="btn btn-sm" href="{{ route('admin.agents.edit',$a) }}">Manage</a></td>
+                        <td>
+                            <div class="entity-cell">
+                                <div class="entity-avatar">{{ strtoupper(substr($agent->username,0,1)) }}</div>
+                                <div><b>{{ $agent->agent_id }}</b><div class="tiny muted">{{ $agent->username }}</div></div>
+                            </div>
+                        </td>
+                        <td><span class="brand-chip">{{ $agent->brand->name }}</span></td>
+                        <td><b>{{ number_format($agent->outstanding_credit,2) }}</b> <span class="tiny muted">ETB</span></td>
+                        <td>
+                            <span class="status-pill {{ $agent->commission_enabled?'success':'neutral' }}">
+                                {{ $agent->commission_enabled?'ON':'OFF' }}
+                            </span>
+                        </td>
+                        <td><a class="btn btn-sm btn-outline" href="{{ route('admin.agents.edit',$agent) }}">Manage</a></td>
                     </tr>
-                @endforeach
+                @empty
+                    <tr><td colspan="5" class="empty">No agents found.</td></tr>
+                @endforelse
                 </tbody>
             </table>
         </div>
