@@ -94,6 +94,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/transactions/{transaction}', [TransactionController::class, 'show'])->name('transactions.show');
         Route::post('/transactions/{transaction}/agent-evidence', [EvidenceController::class, 'agent'])->middleware('throttle:uploads')->name('transactions.agent-evidence');
         Route::post('/transactions/{transaction}/bank-evidence', [EvidenceController::class, 'banks'])->middleware('throttle:uploads')->name('transactions.bank-evidence');
+        Route::post('/evidence/{evidence}/confirm', [EvidenceController::class, 'confirm'])->name('evidence.confirm');
+        Route::post('/evidence/{evidence}/clearer', [EvidenceController::class, 'clearer'])->name('evidence.clearer');
         Route::post('/evidence/{evidence}/retry', [EvidenceController::class, 'retry'])->name('evidence.retry');
         Route::post('/transactions/{transaction}/reason', [TransactionController::class, 'reason'])->name('transactions.reason');
         Route::post('/transactions/{transaction}/corrections', [CorrectionController::class, 'store'])->name('transactions.corrections');
