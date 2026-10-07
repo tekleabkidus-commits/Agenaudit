@@ -27,6 +27,11 @@ class AgentIdentityService
         if ($byId->id !== $byUsername->id) throw new ReviewRequiredException('agent_identity_conflict', 'Agent ID and username resolve to different agents.');
         if (!$byId->is_active || !$byId->brand->is_active) throw new HardRejectException('inactive_agent', 'The detected agent or brand is inactive.');
 
+        $employee = $transaction->employee()->first();
+        if (!$employee || !$employee->canAccessBrand($byId->brand_id)) {
+            throw new HardRejectException('employee_brand_not_allowed', 'This employee is not assigned to the detected agent brand.');
+        }
+
         $brandHint = data_get($extracted, 'brand_hint');
         if ($brandHint && Normalizer::name($brandHint) !== Normalizer::name($byId->brand->name)) {
             throw new ReviewRequiredException('brand_conflict', 'AI brand hint conflicts with the agent master record.');
