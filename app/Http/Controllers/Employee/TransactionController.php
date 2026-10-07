@@ -69,7 +69,28 @@ class TransactionController extends Controller
         $this->authorize('view',$transaction);
         $transaction->load(['agent.brand','brand','payments.fromBank','payments.toBank','payments.receivingAccount','evidenceFiles','events.actor','correctionRequests']);
         $currentOutstanding = $transaction->agent ? $credits->outstanding($transaction->agent) : null;
-        return view('employee.transactions.show', compact('transaction','currentOutstanding'));
+
+        $commissionUsedThisMonth = null;
+        $commissionRemainingThisMonth = null;
+        if ($transaction->agent) {
+            $commissionUsedThisMonth = $transaction->agent->transactions()
+                ->where('type', TransactionType::Commission->value)
+                ->where('status', TransactionStatus::Completed->value)
+                ->whereBetween('completed_at',[now()->startOfMonth(),now()->endOfMonth()])
+                ->count();
+
+            $commissionRemainingThisMonth = max(
+                0,
+                (int)$transaction->agent->commission_monthly_limit - $commissionUsedThisMonth
+            );
+        }
+
+        return view('employee.transactions.show', compact(
+            'transaction',
+            'currentOutstanding',
+            'commissionUsedThisMonth',
+            'commissionRemainingThisMonth'
+        ));
     }
 
     public function reason(Request $request, Transaction $transaction, TransactionWorkflowService $workflow): RedirectResponse
