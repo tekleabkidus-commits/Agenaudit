@@ -191,7 +191,7 @@ class ReportController extends Controller
             'outstandingCredits'=>$outstanding,
             'agentBreakdown'=>$agentBreakdown,
             'exceptionSummary'=>[
-                'duplicates'=>$duplicatePayments->count(),
+                'duplicates'=>(clone $paymentBase)->where('rejection_code','duplicate_transaction_id')->count(),
                 'rejected_payments'=>$rejectedPaymentsCount,
                 'time_flags'=>(clone $paymentBase)->whereIn('risk_level',[
                     RiskLevel::Warning->value,
