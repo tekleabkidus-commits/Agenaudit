@@ -65,3 +65,59 @@ Artisan::command('agent-audit:create-admin {--name=} {--username=} {--email=} {-
 
     return self::SUCCESS;
 })->purpose('Create an active Agent Audit administrator account using Laravel Cloud environment secrets');
+
+
+Artisan::command('agent-audit:repair-admin', function () {
+    $clean = static function ($value): string {
+        $value = trim((string) $value);
+        if (strlen($value) >= 2) {
+            $first = $value[0];
+            $last = $value[strlen($value) - 1];
+            if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                $value = substr($value, 1, -1);
+            }
+        }
+        return $value;
+    };
+
+    $name = $clean(env('BOOTSTRAP_ADMIN_NAME', 'System Administrator'));
+    $username = mb_strtolower($clean(env('BOOTSTRAP_ADMIN_USERNAME', '')));
+    $email = mb_strtolower($clean(env('BOOTSTRAP_ADMIN_EMAIL', '')));
+    $password = $clean(env('BOOTSTRAP_ADMIN_PASSWORD', ''));
+
+    if ($username === '' || strlen($password) < 12) {
+        $this->error('Set BOOTSTRAP_ADMIN_USERNAME and a BOOTSTRAP_ADMIN_PASSWORD of at least 12 characters.');
+        return self::FAILURE;
+    }
+
+    $user = User::query()->where('role', UserRole::Admin->value)->orderBy('id')->first()
+        ?? User::query()->orderBy('id')->first()
+        ?? new User();
+
+    $conflict = User::query()
+        ->whereRaw('LOWER(username) = ?', [$username])
+        ->when($user->exists, fn ($q) => $q->whereKeyNot($user->getKey()))
+        ->exists();
+
+    if ($conflict) {
+        $this->error('Another account already uses that username.');
+        return self::FAILURE;
+    }
+
+    $user->fill([
+        'name' => $name,
+        'username' => $username,
+        'email' => $email !== '' ? $email : null,
+        'password' => $password,
+        'role' => UserRole::Admin,
+        'is_active' => true,
+    ]);
+    $user->save();
+
+    $this->info('Admin account repaired successfully.');
+    $this->line('User ID: '.$user->id);
+    $this->line('Username: '.$user->username);
+    $this->line('Active: yes');
+    $this->comment('Login now uses the exact bootstrap username/password values.');
+    return self::SUCCESS;
+})->purpose('Repair the primary Admin account from Laravel Cloud bootstrap variables');
