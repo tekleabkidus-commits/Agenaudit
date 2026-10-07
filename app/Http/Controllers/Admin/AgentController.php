@@ -32,11 +32,11 @@ class AgentController extends Controller
 
     public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
-        $data=$request->validate(['brand_id'=>['required','exists:brands,id'],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'commission_monthly_limit'=>['nullable','integer','min:1','max:31']]);
+        $data=$request->validate(['brand_id'=>['required','exists:brands,id'],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'credit_due_days'=>['nullable','integer','min:0','max:365'],'commission_monthly_limit'=>['nullable','integer','min:1','max:31']]);
         $id=Normalizer::identifier($data['agent_id']); $user=Normalizer::identifier($data['username']);
         if (Agent::where('agent_id_normalized',$id)->exists()) return back()->withErrors(['agent_id'=>'Agent ID must be globally unique across all brands.'])->withInput();
         if (Agent::where('username_normalized',$user)->exists()) return back()->withErrors(['username'=>'Agent username must be globally unique across all brands.'])->withInput();
-        $agent=Agent::create(['brand_id'=>$data['brand_id'],'agent_id'=>$data['agent_id'],'agent_id_normalized'=>$id,'username'=>$data['username'],'username_normalized'=>$user,'credit_enabled'=>$request->boolean('credit_enabled',true),'credit_limit'=>$data['credit_limit']??null,'commission_enabled'=>$request->boolean('commission_enabled'),'commission_monthly_limit'=>$data['commission_monthly_limit']??2,'is_active'=>true]);
+        $agent=Agent::create(['brand_id'=>$data['brand_id'],'agent_id'=>$data['agent_id'],'agent_id_normalized'=>$id,'username'=>$data['username'],'username_normalized'=>$user,'credit_enabled'=>$request->boolean('credit_enabled',true),'credit_limit'=>$data['credit_limit']??null,'credit_due_days'=>$data['credit_due_days']??null,'commission_enabled'=>$request->boolean('commission_enabled'),'commission_monthly_limit'=>$data['commission_monthly_limit']??2,'is_active'=>true]);
         $audit->log('agent.created',$agent,null,$agent->toArray());
         return back()->with('success','Agent added.');
     }
@@ -53,7 +53,7 @@ class AgentController extends Controller
 
     public function update(Request $request, Agent $agent, AuditLogger $audit): RedirectResponse
     {
-        $data=$request->validate(['brand_id'=>['required','exists:brands,id'],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'commission_monthly_limit'=>['required','integer','min:1','max:31'],'move_reason'=>['nullable','string','max:500']]);
+        $data=$request->validate(['brand_id'=>['required','exists:brands,id'],'agent_id'=>['required','string','max:120'],'username'=>['required','string','max:120'],'credit_limit'=>['nullable','numeric','min:0'],'credit_due_days'=>['nullable','integer','min:0','max:365'],'commission_monthly_limit'=>['required','integer','min:1','max:31'],'move_reason'=>['nullable','string','max:500']]);
         $id=Normalizer::identifier($data['agent_id']); $user=Normalizer::identifier($data['username']);
         if (Agent::where('agent_id_normalized',$id)->whereKeyNot($agent->id)->exists()) return back()->withErrors(['agent_id'=>'Agent ID already belongs to another platform agent.']);
         if (Agent::where('username_normalized',$user)->whereKeyNot($agent->id)->exists()) return back()->withErrors(['username'=>'Agent username already belongs to another platform agent.']);
@@ -62,7 +62,7 @@ class AgentController extends Controller
             if ((int)$data['brand_id'] !== $agent->brand_id) {
                 AgentBrandHistory::create(['agent_id'=>$agent->id,'from_brand_id'=>$agent->brand_id,'to_brand_id'=>$data['brand_id'],'changed_by'=>$request->user()->id,'reason'=>$data['move_reason'] ?: 'Admin brand move','changed_at'=>now()]);
             }
-            $agent->update(['brand_id'=>$data['brand_id'],'agent_id'=>$data['agent_id'],'agent_id_normalized'=>$id,'username'=>$data['username'],'username_normalized'=>$user,'credit_enabled'=>$request->boolean('credit_enabled'),'credit_limit'=>$data['credit_limit']??null,'commission_enabled'=>$request->boolean('commission_enabled'),'commission_monthly_limit'=>$data['commission_monthly_limit'],'is_active'=>$request->boolean('is_active')]);
+            $agent->update(['brand_id'=>$data['brand_id'],'agent_id'=>$data['agent_id'],'agent_id_normalized'=>$id,'username'=>$data['username'],'username_normalized'=>$user,'credit_enabled'=>$request->boolean('credit_enabled'),'credit_limit'=>$data['credit_limit']??null,'credit_due_days'=>$data['credit_due_days']??null,'commission_enabled'=>$request->boolean('commission_enabled'),'commission_monthly_limit'=>$data['commission_monthly_limit'],'is_active'=>$request->boolean('is_active')]);
         });
         $audit->log('agent.updated',$agent,$before,$agent->fresh()->toArray());
         return back()->with('success','Agent updated.');
