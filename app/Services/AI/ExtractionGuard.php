@@ -12,16 +12,21 @@ class ExtractionGuard
 
     public function assertUsable(array $payload, EvidenceKind $kind): void
     {
-        $quality = (float) data_get($payload, 'quality.score', 0);
-        $critical = (float) data_get($payload, 'quality.critical_confidence', 0);
-        $minQuality = $this->settings->float('ai.min_quality_score', (float) config('services.ai.min_quality_score', 0.80));
-        $minCritical = $this->settings->float('ai.min_critical_confidence', (float) config('services.ai.min_critical_confidence', 0.85));
+        $qualityChecks = $this->settings->bool('ai.quality_check_enabled', true);
 
-        if ($quality < $minQuality) {
-            throw new ClearerScreenshotRequiredException('low_quality', 'Screenshot quality is too low. Please upload a clearer screenshot.');
-        }
-        if ($critical < $minCritical) {
-            throw new ClearerScreenshotRequiredException('low_confidence', 'Critical information cannot be read reliably. Please upload a clearer screenshot.');
+        if ($qualityChecks) {
+            $quality = (float) data_get($payload, 'quality.score', 0);
+            $critical = (float) data_get($payload, 'quality.critical_confidence', 0);
+            $minQuality = $this->settings->float('ai.min_quality_score', (float) config('services.ai.min_quality_score', 0.80));
+            $minCritical = $this->settings->float('ai.min_critical_confidence', (float) config('services.ai.min_critical_confidence', 0.75));
+
+            if ($quality < $minQuality) {
+                throw new ClearerScreenshotRequiredException('low_quality', 'Screenshot quality is too low. Please upload a clearer screenshot.');
+            }
+
+            if ($critical < $minCritical) {
+                throw new ClearerScreenshotRequiredException('low_confidence', 'Critical information cannot be read reliably. Please upload a clearer screenshot.');
+            }
         }
 
         $required = $kind === EvidenceKind::AgentSystem
@@ -34,5 +39,17 @@ class ExtractionGuard
                 throw new ClearerScreenshotRequiredException('missing_'.$field, "Required field {$field} is not readable. Please upload a clearer screenshot.");
             }
         }
+    }
+
+    public function requiresEmployeeConfirmation(array $payload): bool
+    {
+        if (!$this->settings->bool('ai.quality_check_enabled', true)) {
+            return false;
+        }
+
+        $critical = (float) data_get($payload, 'quality.critical_confidence', 0);
+        $autoAccept = $this->settings->float('ai.auto_accept_confidence', 0.90);
+
+        return $critical < $autoAccept;
     }
 }
