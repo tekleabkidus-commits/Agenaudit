@@ -58,14 +58,18 @@ Route::middleware('auth')->group(function () {
         Route::get('/receiving-accounts', [ReceivingAccountController::class, 'index'])->name('receiving-accounts.index');
         Route::post('/receiving-accounts', [ReceivingAccountController::class, 'store'])->name('receiving-accounts.store');
         Route::put('/receiving-accounts/{receivingAccount}', [ReceivingAccountController::class, 'update'])->name('receiving-accounts.update');
+
         Route::get('/agents', [AgentController::class, 'index'])->name('agents.index');
         Route::post('/agents', [AgentController::class, 'store'])->name('agents.store');
         Route::get('/agents/{agent}/edit', [AgentController::class, 'edit'])->name('agents.edit');
         Route::put('/agents/{agent}', [AgentController::class, 'update'])->name('agents.update');
+
         Route::get('/agent-imports', [AgentImportController::class, 'index'])->name('agent-imports.index');
+        Route::get('/agent-imports/template.xlsx', [AgentImportController::class, 'template'])->name('agent-imports.template');
         Route::post('/agent-imports', [AgentImportController::class, 'store'])->name('agent-imports.store');
         Route::get('/agent-imports/{agentImport}', [AgentImportController::class, 'show'])->name('agent-imports.show');
         Route::post('/agent-imports/{agentImport}/confirm', [AgentImportController::class, 'confirm'])->name('agent-imports.confirm');
+
         Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
         Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
         Route::put('/employees/{user}', [EmployeeController::class, 'update'])->name('employees.update');
