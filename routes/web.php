@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\BankController;
 use App\Http\Controllers\Admin\BrandController;
 use App\Http\Controllers\Admin\CorrectionReviewController;
 use App\Http\Controllers\Admin\CommissionController;
+use App\Http\Controllers\Admin\CreditController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EmployeeController;
 use App\Http\Controllers\Admin\ManualExtractionController;
@@ -47,6 +48,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/evidence/{evidence}/manual-extraction', [ManualExtractionController::class, 'store'])->name('evidence.manual-extraction');
 
         Route::get('/corrections', [CorrectionReviewController::class, 'index'])->name('corrections.index');
+        Route::get('/credits', [CreditController::class, 'index'])->name('credits.index');
         Route::get('/commissions', [CommissionController::class, 'index'])->name('commissions.index');
         Route::put('/commissions/{agent}', [CommissionController::class, 'update'])->name('commissions.update');
         Route::post('/corrections/{correctionRequest}/approve', [CorrectionReviewController::class, 'approve'])->name('corrections.approve');
