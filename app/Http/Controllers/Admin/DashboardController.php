@@ -14,11 +14,19 @@ class DashboardController extends Controller
     public function __invoke(Request $request, DashboardService $dashboard): View
     {
         $preset = $request->string('date','today')->toString();
-        $range = DateRange::fromPreset($preset,$request->input('from'),$request->input('to'));
+        $from = $request->input('from');
+        $to = $request->input('to');
+
+        if ($preset === 'custom') {
+            $from = $from ?: now()->startOfMonth()->toDateString();
+            $to = $to ?: now()->toDateString();
+        }
+
+        $range = DateRange::fromPreset($preset,$from,$to);
         $brandId = $request->filled('brand') && $request->input('brand') !== 'total' ? (int)$request->input('brand') : null;
         return view('admin.dashboard.index', [
             'data'=>$dashboard->data($range,$brandId),'brands'=>Brand::where('is_active',true)->orderBy('name')->get(),
-            'preset'=>$preset,'brandId'=>$brandId,
+            'preset'=>$preset,'brandId'=>$brandId,'from'=>$from,'to'=>$to,
         ]);
     }
 }
