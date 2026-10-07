@@ -86,6 +86,7 @@ return new class extends Migration {
                 'check_et_code' => 'siinqee',
                 'check_et_requires_account' => false,
                 'check_et_account_source' => 'none',
+                'check_et_enabled' => false,
             ],
             [
                 'code' => 'AMHARA',
@@ -104,7 +105,7 @@ return new class extends Migration {
                     'name' => $provider['name'],
                     'aliases' => json_encode($provider['aliases'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'check_et_code' => $provider['check_et_code'],
-                    'check_et_enabled' => true,
+                    'check_et_enabled' => $provider['check_et_enabled'] ?? true,
                     'check_et_requires_account' => $provider['check_et_requires_account'],
                     'check_et_account_source' => $provider['check_et_account_source'],
                     'is_active' => true,
