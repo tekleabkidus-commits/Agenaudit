@@ -8,7 +8,7 @@ return [
     ],
     'imports' => ['max_agent_rows' => (int) env('MAX_AGENT_IMPORT_ROWS', 50000)],
     'evidence' => [
-        'disk' => env('FILESYSTEM_DISK', 'private'),
+        'disk' => env('EVIDENCE_DISK', env('FILESYSTEM_DISK', 'private')),
         'max_kb' => 12288,
         'allowed_mimes' => ['image/jpeg', 'image/png', 'image/webp'],
         'max_bank_screenshots_per_transaction' => 12,
