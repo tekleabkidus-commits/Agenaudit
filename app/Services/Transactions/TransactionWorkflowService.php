@@ -95,15 +95,13 @@ class TransactionWorkflowService
             return $transaction->fresh();
         }
 
-        if ($payments->contains(fn ($p) => $p->internal_status === PaymentValidationStatus::Rejected)) {
-            return $this->reject($transaction, 'payment_rejected', 'One or more attached bank payments failed a hard internal validation rule.');
-        }
         if ($payments->contains(fn ($p) => $p->internal_status === PaymentValidationStatus::Review)) {
             $transaction->update(['status'=>TransactionStatus::NeedsClearerScreenshot,'review_reason'=>'A bank payment cannot be uniquely verified from the screenshot.']);
             return $transaction->fresh();
         }
 
         $valid = $payments->filter(fn ($p) => $p->internal_status === PaymentValidationStatus::Valid);
+        $rejectedCount = $payments->filter(fn ($p) => $p->internal_status === PaymentValidationStatus::Rejected)->count();
         $bankTotal = round((float) $payments->sum('amount'), 2);
         $validTotal = round((float) $valid->sum('amount'), 2);
         $risk = $valid->pluck('risk_level')->filter()->sortByDesc(fn ($r) => $r->weight())->first() ?? RiskLevel::Normal;
@@ -148,12 +146,21 @@ class TransactionWorkflowService
                 $transaction->update(['status'=>TransactionStatus::PendingAdminReview,'review_reason'=>'Credit repayment exceeds current outstanding credit.']);
                 return $transaction->fresh();
             }
-            $transaction->update(['status'=>TransactionStatus::ReadyForReview,'difference'=>0]);
+            $transaction->update([
+                'status'=>TransactionStatus::ReadyForReview,
+                'difference'=>0,
+                'review_reason'=>$rejectedCount > 0 ? "{$rejectedCount} rejected payment screenshot(s) were excluded from the valid total." : null,
+            ]);
             return $transaction->fresh();
         }
 
         if ($validTotal < (float) $transaction->amount - 0.009) {
-            $transaction->update(['status'=>TransactionStatus::Processing,'review_reason'=>null]);
+            $transaction->update([
+                'status'=>TransactionStatus::Processing,
+                'review_reason'=>$rejectedCount > 0
+                    ? "{$rejectedCount} rejected payment screenshot(s) were excluded. Add valid payment evidence until the valid total matches the agent-system amount."
+                    : null,
+            ]);
             return $transaction->fresh();
         }
         if ($validTotal > (float) $transaction->amount + 0.009) {
@@ -161,7 +168,11 @@ class TransactionWorkflowService
             return $transaction->fresh();
         }
 
-        $transaction->update(['status'=>TransactionStatus::ReadyForReview,'difference'=>0,'review_reason'=>null]);
+        $transaction->update([
+            'status'=>TransactionStatus::ReadyForReview,
+            'difference'=>0,
+            'review_reason'=>$rejectedCount > 0 ? "{$rejectedCount} rejected payment screenshot(s) were excluded from the valid total." : null,
+        ]);
         return $transaction->fresh();
     }
 
