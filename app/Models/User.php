@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -32,4 +33,10 @@ class User extends Authenticatable
     public function deviceSessions(): HasMany { return $this->hasMany(DeviceSession::class); }
     public function permissions(): HasOne { return $this->hasOne(EmployeePermission::class); }
     public function transactions(): HasMany { return $this->hasMany(Transaction::class, 'employee_id'); }
+    public function brands(): BelongsToMany { return $this->belongsToMany(Brand::class)->withTimestamps(); }
+
+    public function canAccessBrand(int $brandId): bool
+    {
+        return $this->isAdmin() || $this->brands()->whereKey($brandId)->exists();
+    }
 }
