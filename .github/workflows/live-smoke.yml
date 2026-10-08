@@ -1,0 +1,31 @@
+name: Production URL smoke check
+
+on:
+  push:
+    paths:
+      - '.github/workflows/live-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Laravel Cloud health endpoint
+        run: |
+          url="https://agenaudit-production-mfxsno.laravel.cloud/up"
+          for attempt in 1 2 3 4 5; do
+            status=$(curl -L --silent --show-error --max-time 25 --output /tmp/agent-audit-health.html --write-out '%{http_code}' "$url") || status="000"
+            echo "Health attempt $attempt: HTTP $status"
+            if [ "$status" = "200" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Production Laravel health check was not successful."
+          exit 1
+      - name: Check production login page without credentials
+        run: |
+          status=$(curl -L --silent --show-error --max-time 25 --output /tmp/agent-audit-login.html --write-out '%{http_code}' https://agenaudit-production-mfxsno.laravel.cloud/login)
+          echo "Login page: HTTP $status"
+          test "$status" = "200"
