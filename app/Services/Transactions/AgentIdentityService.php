@@ -70,8 +70,9 @@ class AgentIdentityService
         if ($transaction->type === TransactionType::Credit && !$byId->credit_enabled) {
             throw new HardRejectException('credit_disabled', 'Credit is disabled for this agent.');
         }
-        if ($transaction->type === TransactionType::Commission && !$byId->commission_enabled) {
-            throw new HardRejectException('commission_disabled', 'Commission Deposit is not enabled for this agent.');
+        if ($transaction->type === TransactionType::Commission
+            && (!$byId->brand->commission_enabled || !$byId->commission_enabled)) {
+            throw new HardRejectException('commission_disabled', 'Commission Deposit is disabled at brand or agent level.');
         }
 
         $this->events->add($transaction, 'agent_identified', "Agent {$byId->agent_id} identified automatically; brand {$byId->brand->name} derived from master data.", [
