@@ -6,9 +6,9 @@
 <div class="mobile-workspace">
     <div class="page-head">
         <div>
-            <span class="eyebrow">STEP 1 · TRANSACTION TYPE</span>
+            <span class="eyebrow">CHOOSE YOUR TRANSACTION</span>
             <h2>What are you recording?</h2>
-            <p>For normal transactions you never select a brand or agent. The screenshot identifies both automatically.</p>
+            <p>Tap a transaction type to go directly to its next step. No empty transaction is created.</p>
         </div>
     </div>
 
@@ -18,75 +18,37 @@
             @forelse($assignedBrands as $brand)
                 <span class="brand-chip">{{ $brand->name }}</span>
             @empty
-                <span class="status-pill danger">No brand assigned</span>
+                <span class="status-pill danger">No active brand assigned</span>
             @endforelse
         </div>
     </div>
 
-    <form method="post" action="{{ route('employee.transactions.store') }}" class="stack" id="transactionTypeForm">
-        @csrf
+    <div class="transaction-type-grid">
+        @foreach($types as $type)
+            @php
+                $meta = match($type->value) {
+                    'paid_topup' => ['icon'=>'+','tone'=>'deposit','title'=>'Add Balance','desc'=>'Next: upload agent-system evidence. Bank receipts follow.'],
+                    'credit' => ['icon'=>'C','tone'=>'credit','title'=>'Give Credit','desc'=>'Next: upload agent-system evidence.'],
+                    'credit_repayment' => ['icon'=>'↺','tone'=>'repayment','title'=>'Credit Repayment','desc'=>'Next: choose an agent with outstanding credit.'],
+                    'withdrawal' => ['icon'=>'−','tone'=>'withdrawal','title'=>'Remove Balance','desc'=>'Next: upload agent evidence and provide a reason.'],
+                    'commission' => ['icon'=>'%','tone'=>'commission','title'=>'Commission Deposit','desc'=>'Next: upload agent evidence. Admin controls eligibility.'],
+                };
+            @endphp
 
-        <div class="transaction-type-grid">
-            @foreach($types as $type)
-                @php
-                    $selected = old('type',request('type')) === $type->value;
-                    $meta = match($type->value) {
-                        'paid_topup' => ['icon'=>'+','tone'=>'deposit','title'=>'Add Balance','desc'=>'Money has been received. Multiple bank receipts can be combined.'],
-                        'credit' => ['icon'=>'C','tone'=>'credit','title'=>'Give Credit','desc'=>'Increase agent balance now. No bank screenshot until repayment.'],
-                        'credit_repayment' => ['icon'=>'↺','tone'=>'repayment','title'=>'Credit Repayment','desc'=>'Money received later. Reduce outstanding credit without adding balance again.'],
-                        'withdrawal' => ['icon'=>'−','tone'=>'withdrawal','title'=>'Remove Balance','desc'=>'Sensitive balance removal. Agent screenshot and structured reason are required.'],
-                        'commission' => ['icon'=>'%','tone'=>'commission','title'=>'Commission Deposit','desc'=>'No bank screenshot. Available only when Admin enabled it for that agent.'],
-                    };
-                @endphp
+            <a class="transaction-type-card {{ $meta['tone'] }}"
+               href="{{ route('employee.transactions.start',['type'=>$type->value]) }}">
+                <span class="type-icon">{{ $meta['icon'] }}</span>
+                <span class="type-copy">
+                    <b>{{ $meta['title'] }}</b>
+                    <small>{{ $meta['desc'] }}</small>
+                </span>
+                <span class="type-arrow" aria-hidden="true">→</span>
+            </a>
+        @endforeach
+    </div>
 
-                <label class="transaction-type-card {{ $meta['tone'] }} {{ $selected?'selected':'' }}">
-                    <input type="radio" name="type" value="{{ $type->value }}" required @checked($selected)>
-                    <span class="type-icon">{{ $meta['icon'] }}</span>
-                    <span class="type-copy">
-                        <b>{{ $meta['title'] }}</b>
-                        <small>{{ $meta['desc'] }}</small>
-                    </span>
-                    <span class="type-check">✓</span>
-                </label>
-            @endforeach
-        </div>
-
-        <section id="repaymentBox" class="card repayment-box" style="{{ old('type',request('type'))==='credit_repayment'?'':'display:none' }}">
-            <span class="eyebrow">CREDIT REPAYMENT ONLY</span>
-            <h3>Which outstanding credit account is being repaid?</h3>
-            <div class="field">
-                <label>Agent with outstanding credit</label>
-                <select class="select" name="repayment_agent_id">
-                    <option value="">Choose agent</option>
-                    @foreach($outstandingAgents as $row)
-                        <option value="{{ $row['agent']->id }}" @selected(old('repayment_agent_id')==$row['agent']->id)>
-                            {{ $row['agent']->agent_id }} · {{ $row['agent']->username }} · {{ $row['agent']->brand->name }} · {{ number_format($row['outstanding'],2) }} ETB outstanding
-                        </option>
-                    @endforeach
-                </select>
-                <small>This is the only flow where an agent is selected manually because repayment does not create a new agent-system balance increase.</small>
-            </div>
-        </section>
-
-        <div class="create-footer">
-            <a class="btn btn-ghost" href="{{ route('employee.home') }}">Cancel</a>
-            <button class="btn btn-primary btn-lg">Continue to Evidence →</button>
-        </div>
-    </form>
+    <div class="tiny muted" style="margin-top:14px">
+        Nothing is saved until you upload your first screenshot.
+    </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const cards = document.querySelectorAll('.transaction-type-card');
-    const repayment = document.getElementById('repaymentBox');
-
-    cards.forEach(card => {
-        const input = card.querySelector('input[type=radio]');
-        input.addEventListener('change', function () {
-            cards.forEach(other => other.classList.toggle('selected', other.querySelector('input').checked));
-            if (repayment) repayment.style.display = this.value === 'credit_repayment' ? 'block' : 'none';
-        });
-    });
-});
-</script>
 @endsection
