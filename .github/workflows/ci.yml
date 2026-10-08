@@ -1,0 +1,63 @@
+name: Agent Audit CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, curl, xml, zip, pdo_sqlite, sqlite3, gd, fileinfo, intl
+          coverage: none
+          tools: composer:v2
+      - name: Validate Composer manifest
+        run: composer validate --no-check-publish
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Check PHP syntax
+        run: find app bootstrap config database routes tests -name '*.php' -print0 | xargs -0 -n1 php -l >/tmp/php-lint.txt && tail -1 /tmp/php-lint.txt
+      - name: Prepare application
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+      - name: Run migrations and tests
+        run: |
+          php artisan migrate:fresh --force
+          php artisan test
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          AI_ENABLED: 'false'
+          CHECK_ET_ENABLED: 'false'
+      - name: Validate routes and compile Blade views
+        run: |
+          php artisan route:list
+          php artisan view:cache
+        env:
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          CACHE_STORE: array
+          SESSION_DRIVER: array
