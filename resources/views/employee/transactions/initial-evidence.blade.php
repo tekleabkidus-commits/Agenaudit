@@ -6,10 +6,10 @@
 @php
     $isRepayment = $type === App\Enums\TransactionType::CreditRepayment;
     $meta = match ($type) {
-        App\Enums\TransactionType::PaidTopup => ['eyebrow'=>'PAID TOP-UP · FIRST EVIDENCE','title'=>'Upload agent-system screenshot','description'=>'Upload the agent balance-added screenshot first. Once AI identifies the agent and brand, you can attach one or more bank receipts.'],
-        App\Enums\TransactionType::Credit => ['eyebrow'=>'GIVE CREDIT · FIRST EVIDENCE','title'=>'Upload credit screenshot','description'=>'Upload proof of the balance credited to the agent. No bank screenshot is required for credit issue.'],
-        App\Enums\TransactionType::Commission => ['eyebrow'=>'COMMISSION DEPOSIT · FIRST EVIDENCE','title'=>'Upload commission screenshot','description'=>'Upload agent-system proof. The platform checks Admin commission permission and monthly limit automatically.'],
-        App\Enums\TransactionType::Withdrawal => ['eyebrow'=>'REMOVE BALANCE · FIRST EVIDENCE','title'=>'Upload balance-removal screenshot','description'=>'Upload agent-system proof. You will choose a structured removal reason after AI identifies the agent.'],
+        App\Enums\TransactionType::PaidTopup => ['eyebrow'=>'PAID TOP-UP · FIRST EVIDENCE','title'=>'Upload agent-system proof images','description'=>'Upload up to five agent-system screenshots of the same top-up first. Once AI identifies the agent and brand, you can attach one or more bank receipts.'],
+        App\Enums\TransactionType::Credit => ['eyebrow'=>'GIVE CREDIT · FIRST EVIDENCE','title'=>'Upload credit proof images','description'=>'Upload screenshots proving the balance credited to the agent. No bank screenshot is required for credit issue.'],
+        App\Enums\TransactionType::Commission => ['eyebrow'=>'COMMISSION DEPOSIT · FIRST EVIDENCE','title'=>'Upload commission proof images','description'=>'Upload one or several agent-system screenshots. The platform checks Admin commission permission and monthly limit automatically.'],
+        App\Enums\TransactionType::Withdrawal => ['eyebrow'=>'REMOVE BALANCE · FIRST EVIDENCE','title'=>'Upload balance-removal proof images','description'=>'Upload one or several agent-system screenshots. You will choose a structured removal reason after AI identifies the agent.'],
         App\Enums\TransactionType::CreditRepayment => ['eyebrow'=>'CREDIT REPAYMENT · BANK EVIDENCE','title'=>'Upload repayment bank receipt(s)','description'=>'Upload one or more bank receipts for this agent. The verified amount reduces outstanding credit; it does not increase agent balance.'],
     };
 @endphp
@@ -48,7 +48,7 @@
             <span class="step-number">1</span>
             <div>
                 <h3>{{ $isRepayment ? 'Bank payment evidence' : 'Agent-system evidence' }}</h3>
-                <p>This screenshot is required before the transaction is saved.</p>
+                <p>At least one proof image is required before the transaction is saved.</p>
             </div>
         </div>
 
@@ -65,9 +65,9 @@
             @else
                 <label class="upload-zone">
                     <span class="upload-icon">↑</span>
-                    <b>Select agent-system screenshot</b>
-                    <small>Clear JPEG, PNG or WebP image showing agent ID, username, amount and timestamp.</small>
-                    <input type="file" name="screenshot" accept="image/jpeg,image/png,image/webp" required>
+                    <b>Select agent-system proof images</b>
+                    <small>1–{{ config('agent_audit.evidence.max_agent_proof_images_per_transaction',5) }} clear JPEG, PNG or WebP images of the same transaction. AI reads them together; repeated amounts are never added.</small>
+                    <input type="file" name="screenshots[]" accept="image/jpeg,image/png,image/webp" multiple required>
                 </label>
             @endif
 
