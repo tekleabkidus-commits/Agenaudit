@@ -1090,3 +1090,10 @@ button,.btn{transition:background .18s,border-color .18s,box-shadow .18s,transfo
   .commission-brand-panel>form{padding-block:15px}
   .filter-card .filters select[name=agent]{width:100%}
 }
+
+/* Grouped agent-system proof gallery */
+.proof-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px;margin:12px 0 8px}
+.proof-gallery-item{display:flex;flex-direction:column;gap:7px;min-width:0;text-decoration:none;color:var(--text);font-size:11px;font-weight:700}
+.proof-gallery-item img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.proof-gallery-item:hover img,.proof-gallery-item:focus-visible img{border-color:var(--blue);box-shadow:0 0 0 3px rgba(33,91,232,.1)}
+@media(max-width:600px){.proof-gallery{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}}
