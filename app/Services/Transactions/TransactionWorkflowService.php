@@ -73,7 +73,7 @@ class TransactionWorkflowService
         }
 
         if ($transaction->type === TransactionType::Commission) {
-            if (!$transaction->agent->commission_enabled) return $this->reject($transaction, 'commission_disabled', 'Commission Deposit is not enabled for this agent.');
+            if (!$transaction->agent->commission_enabled || !$transaction->brand?->commission_enabled) return $this->reject($transaction, 'commission_disabled', 'Commission Deposit is disabled for this brand or agent.');
             $count = Transaction::where('agent_id',$transaction->agent_id)->where('type',TransactionType::Commission->value)
                 ->where('status',TransactionStatus::Completed->value)->whereBetween('completed_at',[now()->startOfMonth(),now()->endOfMonth()])->count();
             if ($count >= $transaction->agent->commission_monthly_limit) {
@@ -262,7 +262,7 @@ class TransactionWorkflowService
                 $agent = Agent::whereKey($locked->agent_id)->lockForUpdate()->firstOrFail();
                 $count = Transaction::where('agent_id',$agent->id)->where('type',TransactionType::Commission->value)
                     ->where('status',TransactionStatus::Completed->value)->whereBetween('completed_at',[now()->startOfMonth(),now()->endOfMonth()])->count();
-                if (!$agent->commission_enabled || $count >= $agent->commission_monthly_limit) throw new RuntimeException('Commission eligibility changed before completion.');
+                if (!$agent->commission_enabled || !$agent->brand()->where('commission_enabled', true)->exists() || $count >= $agent->commission_monthly_limit) throw new RuntimeException('Commission eligibility changed at brand or agent level before completion.');
             }
 
             if ($locked->type === TransactionType::Credit) {
