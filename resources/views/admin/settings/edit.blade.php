@@ -62,7 +62,7 @@
 
             <div class="form-grid">
                 <div class="field"><label>Provider outage</label><select class="select" name="check_et_outage_mode"><option value="review" @selected($values['check_et.outage_mode']==='review')>Send to Admin review</option><option value="allow" @selected($values['check_et.outage_mode']==='allow')>Allow internal verification</option></select></div>
-                <div class="field"><label>Verification failed</label><select class="select" name="check_et_failure_mode"><option value="review" @selected($values['check_et.failure_mode']==='review')>Send to Admin review</option><option value="allow" @selected($values['check_et.failure_mode']==='allow')>Allow internal verification</option></select></div>
+                <div class="field"><label>Verification failed</label><select class="select" name="check_et_failure_mode"><option value="review" @selected($values['check_et.failure_mode']==='review')>Send to Admin review</option></select></div>
                 <div class="field"><label>Timeout seconds</label><input class="input" type="number" min="2" max="60" name="check_et_timeout_seconds" value="{{ $values['check_et.timeout_seconds'] }}"></div>
                 <div class="field"><label>Automatic retries</label><input class="input" type="number" min="0" max="5" name="check_et_retries" value="{{ $values['check_et.retries'] }}"></div>
             </div>
