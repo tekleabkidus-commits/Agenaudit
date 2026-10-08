@@ -262,6 +262,14 @@ class EvidenceProcessor
 
     private function aiEnabledFor(EvidenceKind $kind): bool
     {
+        // The Gemini free API can use submitted content to improve Google
+        // services. Do not send private bank proof until an administrator
+        // explicitly approves that provider's data handling.
+        if (config('services.ai.driver') === 'gemini'
+            && !config('services.ai.gemini_allow_sensitive_evidence', false)) {
+            return false;
+        }
+
         if (!$this->settings->bool('ai.enabled', (bool) config('services.ai.enabled'))) {
             return false;
         }
