@@ -25,27 +25,27 @@
     </div>
 
     <section class="transaction-launch-grid">
-        <a class="launch-card deposit" href="{{ route('employee.transactions.create',['type'=>'paid_topup']) }}">
+        <a class="launch-card deposit" href="{{ route('employee.transactions.start',['type'=>'paid_topup']) }}">
             <span class="launch-icon">＋</span>
             <div><b>Add Balance</b><small>Paid top-up</small></div>
             <span class="launch-arrow">→</span>
         </a>
-        <a class="launch-card credit" href="{{ route('employee.transactions.create',['type'=>'credit']) }}">
+        <a class="launch-card credit" href="{{ route('employee.transactions.start',['type'=>'credit']) }}">
             <span class="launch-icon">C</span>
             <div><b>Give Credit</b><small>Balance now, payment later</small></div>
             <span class="launch-arrow">→</span>
         </a>
-        <a class="launch-card commission" href="{{ route('employee.transactions.create',['type'=>'commission']) }}">
+        <a class="launch-card commission" href="{{ route('employee.transactions.start',['type'=>'commission']) }}">
             <span class="launch-icon">%</span>
             <div><b>Commission</b><small>Admin-enabled agents only</small></div>
             <span class="launch-arrow">→</span>
         </a>
-        <a class="launch-card withdrawal" href="{{ route('employee.transactions.create',['type'=>'withdrawal']) }}">
+        <a class="launch-card withdrawal" href="{{ route('employee.transactions.start',['type'=>'withdrawal']) }}">
             <span class="launch-icon">−</span>
             <div><b>Remove Balance</b><small>Sensitive action</small></div>
             <span class="launch-arrow">→</span>
         </a>
-        <a class="launch-card repayment" href="{{ route('employee.transactions.create',['type'=>'credit_repayment']) }}">
+        <a class="launch-card repayment" href="{{ route('employee.transactions.start',['type'=>'credit_repayment']) }}">
             <span class="launch-icon">↺</span>
             <div><b>Credit Repayment</b><small>Reduce outstanding credit</small></div>
             <span class="launch-arrow">→</span>
