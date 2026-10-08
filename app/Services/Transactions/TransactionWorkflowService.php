@@ -31,17 +31,21 @@ class TransactionWorkflowService
     public function create(User $employee, TransactionType $type, ?Agent $repaymentAgent = null): Transaction
     {
         $attrs = [
-            'reference'=>(string) Str::uuid(),'employee_id'=>$employee->id,'type'=>$type,'status'=>TransactionStatus::Draft,
+            'reference'=>(string) Str::uuid(),'employee_id'=>$employee->id,'type'=>$type,'status'=>TransactionStatus::Processing,
             'external_verification_status'=>ExternalVerificationStatus::NotRequired,
         ];
         if ($type === TransactionType::CreditRepayment) {
             if (!$repaymentAgent) throw new RuntimeException('Credit repayment requires an outstanding-credit agent.');
+            $repaymentAgent->loadMissing('brand');
+            if (!$repaymentAgent->is_active || !$repaymentAgent->brand?->is_active || !$employee->canAccessBrand($repaymentAgent->brand_id)) {
+                throw new HardRejectException('repayment_agent_not_allowed', 'This agent is inactive or is outside your assigned brands.');
+            }
             $outstanding = $this->credits->outstanding($repaymentAgent);
             if ($outstanding <= 0) throw new HardRejectException('no_outstanding_credit', 'This agent has no outstanding credit.');
             $attrs += ['agent_id'=>$repaymentAgent->id,'brand_id'=>$repaymentAgent->brand_id,'outstanding_credit_at_time'=>$outstanding];
         }
         $transaction = Transaction::create($attrs);
-        $this->events->add($transaction, 'created', 'Transaction draft created.', ['type'=>$type->value], $employee);
+        $this->events->add($transaction, 'created', 'Transaction created with uploaded evidence.', ['type'=>$type->value], $employee);
         $this->audit->log('transaction.created', $transaction, null, $transaction->only(['reference','type','status']), [], $employee);
         return $transaction;
     }
