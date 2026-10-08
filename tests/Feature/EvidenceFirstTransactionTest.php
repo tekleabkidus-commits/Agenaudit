@@ -9,6 +9,11 @@ use App\Enums\TransactionType;
 use App\Enums\UserRole;
 use App\Jobs\ProcessEvidenceJob;
 use App\Models\Agent;
+use App\Services\AI\VisionExtractorInterface;
+use App\Services\Transactions\EvidenceProcessor;
+use App\Services\Transactions\EvidenceStorageService;
+use App\Services\SettingsService;
+use Mockery;
 use App\Models\Brand;
 use App\Models\CreditLedgerEntry;
 use App\Models\EvidenceFile;
@@ -238,6 +243,52 @@ class EvidenceFirstTransactionTest extends TestCase
 
         $this->assertDatabaseCount('transactions',0);
         $this->assertDatabaseCount('evidence_files',0);
+    }
+
+    public function test_two_agent_proofs_are_read_together_and_do_not_double_count_amount(): void
+    {
+        Storage::fake('private');
+        $brand=$this->brand();
+        $employee=$this->employee($brand);
+        $agent=$this->agent($brand);
+
+        $transaction=Transaction::create([
+            'reference'=>(string) Str::uuid(),
+            'employee_id'=>$employee->id,
+            'type'=>TransactionType::Credit,
+            'status'=>TransactionStatus::Processing,
+        ]);
+
+        $store=app(EvidenceStorageService::class);
+        $first=$store->store($transaction,UploadedFile::fake()->image('first.png'),EvidenceKind::AgentSystem);
+        $store->store($transaction,UploadedFile::fake()->image('second.png'),EvidenceKind::AgentSystem);
+
+        app(SettingsService::class)->set('ai.enabled',true);
+
+        $mock=Mockery::mock(VisionExtractorInterface::class);
+        $mock->shouldReceive('extractMany')->once()
+            ->withArgs(fn ($group) => count($group)===2)
+            ->andReturn([
+                'quality'=>['score'=>.99,'critical_confidence'=>.99,'issues'=>[]],
+                'agent_id'=>$agent->agent_id,
+                'agent_username'=>$agent->username,
+                'amount'=>150,
+                'transaction_at'=>now()->toIso8601String(),
+                'balance_before'=>100,
+                'balance_after'=>250,
+                'transaction_reference'=>'SAME-EVENT-123',
+                'brand_hint'=>$brand->name,
+            ]);
+        $this->app->instance(VisionExtractorInterface::class,$mock);
+
+        app(EvidenceProcessor::class)->process($first);
+        $transaction->refresh();
+
+        $this->assertSame($agent->id,$transaction->agent_id);
+        $this->assertEquals(150,$transaction->amount);
+        $this->assertSame(TransactionStatus::ReadyForReview,$transaction->status);
+        $this->assertSame(2,$transaction->evidenceFiles()
+            ->where('status',\App\Enums\EvidenceStatus::Extracted->value)->count());
     }
 
 }
