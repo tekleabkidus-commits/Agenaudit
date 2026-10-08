@@ -58,7 +58,7 @@ class EvidenceFirstTransactionTest extends TestCase
         return Agent::create([
             'brand_id'=>$brand->id,
             'agent_id'=>'A-123',
-            'agent_id_normalized'=>'A123',
+            'agent_id_normalized'=>\App\Support\Normalizer::identifier('A-123'),
             'username'=>'testagent',
             'username_normalized'=>'TESTAGENT',
             'is_active'=>true,
