@@ -100,6 +100,36 @@ class PaymentVerificationService
             throw $e;
         }
 
+        // A receipt that visibly states FAILED, CANCELLED or PENDING is not proof
+        // of settled money, even when its account and reference look plausible.
+        $receiptStatus = mb_strtolower(trim((string) data_get($extracted, 'status', '')));
+        $failedMarkers = ['failed', 'declined', 'rejected', 'cancelled', 'canceled', 'unsuccessful', 'reversed', 'voided'];
+        $pendingMarkers = ['pending', 'processing', 'initiated', 'awaiting', 'in progress', 'on hold'];
+
+        foreach ($failedMarkers as $marker) {
+            if ($receiptStatus !== '' && str_contains($receiptStatus, $marker)) {
+                $payment->update([
+                    'internal_status' => PaymentValidationStatus::Rejected,
+                    'external_status' => ExternalVerificationStatus::NotRequired,
+                    'rejection_code' => 'payment_not_successful',
+                    'rejection_reason' => 'Receipt explicitly shows an unsuccessful or reversed payment.',
+                ]);
+                return $payment->fresh();
+            }
+        }
+
+        foreach ($pendingMarkers as $marker) {
+            if ($receiptStatus !== '' && str_contains($receiptStatus, $marker)) {
+                $payment->update([
+                    'internal_status' => PaymentValidationStatus::Review,
+                    'external_status' => ExternalVerificationStatus::NotRequired,
+                    'rejection_code' => 'payment_not_completed',
+                    'rejection_reason' => 'Receipt does not yet show a completed payment.',
+                ]);
+                return $payment->fresh();
+            }
+        }
+
         if ($match->status === 'no_match') {
             $payment->update([
                 'internal_status'=>PaymentValidationStatus::Rejected,
