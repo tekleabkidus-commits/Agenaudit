@@ -1,0 +1,38 @@
+name: Pin Laravel dependencies
+
+on:
+  push:
+    paths:
+      - '.github/workflows/dependency-lock.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, curl, xml, zip, pdo_sqlite, sqlite3, gd, fileinfo, intl
+          coverage: none
+          tools: composer:v2
+      - name: Resolve and pin dependencies
+        run: |
+          if [ ! -f composer.lock ]; then
+            composer update --no-install --no-interaction --prefer-dist --no-progress
+            composer validate --no-check-publish
+          fi
+      - name: Commit lockfile only if created
+        run: |
+          if ! git ls-files --error-unmatch composer.lock >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add composer.lock
+            git commit -m "Pin tested Composer dependency versions"
+            git push origin HEAD:main
+          fi
