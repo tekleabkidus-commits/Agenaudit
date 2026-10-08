@@ -9,6 +9,7 @@ use App\Exceptions\ClearerScreenshotRequiredException;
 use App\Exceptions\HardRejectException;
 use App\Exceptions\ReviewRequiredException;
 use App\Models\EvidenceFile;
+use Illuminate\Support\Collection;
 use App\Models\User;
 use App\Services\AI\ExtractionGuard;
 use App\Services\AI\VisionExtractorInterface;
@@ -32,22 +33,31 @@ class EvidenceProcessor
     public function process(EvidenceFile $evidence): void
     {
         $transaction = $evidence->transaction;
+        $group = $this->activeGroup($evidence);
+        if ($evidence->kind === EvidenceKind::AgentSystem && $group->first()?->id !== $evidence->id) {
+            // Only the first agent proof queues extraction for the whole group.
+            return;
+        }
 
         if ($this->isFinalized($transaction)) {
             // Delayed jobs must never change financial evidence after closure.
-            $evidence->update([
-                'status'=>EvidenceStatus::Superseded,
-                'failure_reason'=>'Transaction was finalized before evidence processing.',
-            ]);
+            foreach ($group as $file) {
+                $file->update([
+                    'status'=>EvidenceStatus::Superseded,
+                    'failure_reason'=>'Transaction was finalized before evidence processing.',
+                ]);
+            }
             return;
         }
 
 
         if (!$this->aiEnabledFor($evidence->kind)) {
-            $evidence->update([
-                'status'=>EvidenceStatus::PendingAdminExtraction,
-                'failure_reason'=>'Automatic extraction is disabled for this evidence type.',
-            ]);
+            foreach ($group as $file) {
+                $file->update([
+                    'status'=>EvidenceStatus::PendingAdminExtraction,
+                    'failure_reason'=>'Automatic extraction is disabled for this evidence type.',
+                ]);
+            }
             $transaction->update([
                 'status'=>TransactionStatus::PendingAdminExtraction,
                 'review_reason'=>'Automatic extraction is disabled; Admin extraction is required.',
@@ -56,10 +66,16 @@ class EvidenceProcessor
             return;
         }
 
-        $evidence->update(['status'=>EvidenceStatus::Processing,'failure_reason'=>null]);
+        foreach ($group as $file) {
+            $file->update(['status'=>EvidenceStatus::Processing,'failure_reason'=>null]);
+        }
 
         try {
-            $payload = $this->vision->extract($evidence);
+            // Supplementary agent proofs are one single financial operation.
+            // Bank receipts are always extracted separately.
+            $payload = $group->count() > 1
+                ? $this->vision->extractMany($group->all())
+                : $this->vision->extract($evidence);
 
             if (
                 $evidence->kind === EvidenceKind::AgentSystem
@@ -68,20 +84,24 @@ class EvidenceProcessor
                 $payload['brand_hint'] = null;
             }
 
-            $evidence->update([
-                'raw_ai_response'=>$payload,
-                'quality_score'=>(float) data_get($payload,'quality.score',0),
-                'critical_confidence'=>(float) data_get($payload,'quality.critical_confidence',0),
-            ]);
+            foreach ($group as $file) {
+                $file->update([
+                    'raw_ai_response'=>$payload,
+                    'quality_score'=>(float) data_get($payload,'quality.score',0),
+                    'critical_confidence'=>(float) data_get($payload,'quality.critical_confidence',0),
+                ]);
+            }
 
             $this->guard->assertUsable($payload, $evidence->kind);
 
             if ($this->guard->requiresEmployeeConfirmation($payload)) {
-                $evidence->update([
-                    'status'=>EvidenceStatus::PendingEmployeeConfirmation,
-                    'extracted'=>$payload,
-                    'failure_reason'=>null,
-                ]);
+                foreach ($group as $file) {
+                    $file->update([
+                        'status'=>$file->id === $evidence->id ? EvidenceStatus::PendingEmployeeConfirmation : EvidenceStatus::Extracted,
+                        'extracted'=>$payload,
+                        'failure_reason'=>null,
+                    ]);
+                }
                 $transaction->update([
                     'status'=>TransactionStatus::PendingEmployeeConfirmation,
                     'review_reason'=>'AI confidence is medium. Employee confirmation is required before the extracted values are used.',
@@ -93,25 +113,27 @@ class EvidenceProcessor
                 return;
             }
 
-            $evidence->update([
-                'status'=>EvidenceStatus::Extracted,
-                'extracted'=>$payload,
-                'failure_reason'=>null,
-            ]);
+            foreach ($group as $file) {
+                $file->update([
+                    'status'=>EvidenceStatus::Extracted,
+                    'extracted'=>$payload,
+                    'failure_reason'=>null,
+                ]);
+            }
 
             $this->applyWithHandling($evidence, $payload);
         } catch (ClearerScreenshotRequiredException $e) {
             $this->markNeedsReupload($evidence, $e->getMessage(), $e->reasonCode);
         } catch (HardRejectException $e) {
-            $evidence->update(['failure_reason'=>$e->getMessage()]);
+            foreach ($group as $file) $file->update(['failure_reason'=>$e->getMessage()]);
             $this->workflow->reject($transaction, $e->codeName, $e->getMessage());
         } catch (ReviewRequiredException $e) {
-            $evidence->update(['failure_reason'=>$e->getMessage()]);
+            foreach ($group as $file) $file->update(['failure_reason'=>$e->getMessage()]);
             $transaction->update(['status'=>TransactionStatus::PendingAdminReview,'review_reason'=>$e->getMessage()]);
             $this->events->add($transaction, 'admin_review_required', $e->getMessage(), ['code'=>$e->reasonCode]);
         } catch (Throwable $e) {
             report($e);
-            $evidence->update(['status'=>EvidenceStatus::Failed,'failure_reason'=>'Evidence processing failed.']);
+            foreach ($group as $file) $file->update(['status'=>EvidenceStatus::Failed,'failure_reason'=>'Evidence processing failed.']);
             $transaction->update(['status'=>TransactionStatus::PendingAdminReview,'review_reason'=>'Evidence processor failed; Admin review required.']);
             $this->events->add($transaction, 'processing_failed', 'Evidence processing failed and was routed to Admin review.');
         }
@@ -170,14 +192,16 @@ class EvidenceProcessor
             throw new RuntimeException('Manual extraction is only allowed when automatic extraction is disabled for this evidence.');
         }
 
-        $evidence->update([
-            'status'=>EvidenceStatus::Extracted,
-            'extracted'=>$payload,
-            'raw_ai_response'=>null,
-            'quality_score'=>1,
-            'critical_confidence'=>1,
-            'failure_reason'=>null,
-        ]);
+        foreach ($this->activeGroup($evidence) as $file) {
+            $file->update([
+                'status'=>EvidenceStatus::Extracted,
+                'extracted'=>$payload,
+                'raw_ai_response'=>null,
+                'quality_score'=>1,
+                'critical_confidence'=>1,
+                'failure_reason'=>null,
+            ]);
+        }
 
         $this->events->add($evidence->transaction, 'admin_manual_extraction', 'Admin supplied extraction while AI was disabled.', ['evidence_id'=>$evidence->id], $admin);
         $this->applyWithHandling($evidence, $payload);
@@ -229,7 +253,9 @@ class EvidenceProcessor
 
     private function markNeedsReupload(EvidenceFile $evidence, string $message, string $code, ?User $actor = null): void
     {
-        $evidence->update(['status'=>EvidenceStatus::NeedsReupload,'failure_reason'=>$message]);
+        foreach ($this->activeGroup($evidence) as $file) {
+            $file->update(['status'=>EvidenceStatus::NeedsReupload,'failure_reason'=>$message]);
+        }
         $evidence->transaction->update(['status'=>TransactionStatus::NeedsClearerScreenshot,'review_reason'=>$message]);
         $this->events->add($evidence->transaction, 'clearer_screenshot_required', $message, ['code'=>$code], $actor);
     }
@@ -243,6 +269,18 @@ class EvidenceProcessor
         return $kind === EvidenceKind::AgentSystem
             ? $this->settings->bool('ai.agent_extraction_enabled', true)
             : $this->settings->bool('ai.bank_extraction_enabled', true);
+    }
+
+    /** @return Collection<int, EvidenceFile> */
+    private function activeGroup(EvidenceFile $evidence): Collection
+    {
+        if ($evidence->kind !== EvidenceKind::AgentSystem) return collect([$evidence]);
+
+        return $evidence->transaction->evidenceFiles()
+            ->where('kind',EvidenceKind::AgentSystem->value)
+            ->whereNull('superseded_by_id')
+            ->orderBy('id')
+            ->get();
     }
 
     private function isFinalized(\App\Models\Transaction $transaction): bool
