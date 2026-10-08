@@ -60,7 +60,7 @@ class AgentImportService
                 $byId=Agent::where('agent_id_normalized',$id)->lockForUpdate()->first(); $byUser=Agent::where('username_normalized',$user)->lockForUpdate()->first();
                 if($row->action==='new'){
                     if($byId||$byUser)throw new RuntimeException("Import conflict appeared after preview at row {$row->row_number}; preview the file again.");
-                    Agent::create(['brand_id'=>$brand->id,'agent_id'=>$row->agent_id,'agent_id_normalized'=>$id,'username'=>$row->agent_username,'username_normalized'=>$user]);
+                    Agent::create(['brand_id'=>$brand->id,'agent_id'=>$row->agent_id,'agent_id_normalized'=>$id,'username'=>$row->agent_username,'username_normalized'=>$user,'commission_enabled'=>$brand->commission_enabled,'commission_monthly_limit'=>$brand->commission_monthly_limit]);
                 } else {
                     if(!$byId||!$byUser||$byId->id!==$byUser->id)throw new RuntimeException("Existing agent changed after preview at row {$row->row_number}; preview the file again.");
                     if($row->action==='move'&&$byId->brand_id!==$brand->id){$from=$byId->brand_id;$byId->update(['brand_id'=>$brand->id]);AgentBrandHistory::create(['agent_id'=>$byId->id,'from_brand_id'=>$from,'to_brand_id'=>$brand->id,'changed_by'=>$admin->id,'reason'=>'Excel import move','changed_at'=>now()]);}
