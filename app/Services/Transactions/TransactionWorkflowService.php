@@ -158,7 +158,7 @@ class TransactionWorkflowService
 
         $hasAdminExternalOverride = $transaction->confirmations->contains(fn ($c) => $c->kind === 'admin_external_override');
         $externalNeedsReview = !$hasAdminExternalOverride && match ($aggregateExternal) {
-            ExternalVerificationStatus::Failed => $this->settings->get('check_et.failure_mode', config('services.check_et.failure_mode', 'review')) === 'review',
+            ExternalVerificationStatus::Failed => true, // External rejection must always require Admin review.
             ExternalVerificationStatus::Unavailable => $this->settings->get('check_et.outage_mode', config('services.check_et.outage_mode', 'review')) === 'review',
             default => false,
         };
