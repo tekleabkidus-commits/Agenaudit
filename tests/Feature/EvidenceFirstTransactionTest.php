@@ -284,7 +284,7 @@ class EvidenceFirstTransactionTest extends TestCase
         app(EvidenceProcessor::class)->process($first);
         $transaction->refresh();
 
-        $this->assertSame($agent->id,$transaction->agent_id);
+        $this->assertSame($agent->id,$transaction->agent_id,$transaction->review_reason ?: $transaction->rejection_reason ?: 'No review reason');
         $this->assertEquals(150,$transaction->amount);
         $this->assertSame(TransactionStatus::ReadyForReview,$transaction->status);
         $this->assertSame(2,$transaction->evidenceFiles()
