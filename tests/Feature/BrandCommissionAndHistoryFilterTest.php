@@ -88,9 +88,9 @@ class BrandCommissionAndHistoryFilterTest extends TestCase
         $response->assertSee('name="agent"',false);
 
         $this->actingAs($employee)->get(route('employee.transactions.index',['agent'=>$own->id]))
-            ->assertOk()->assertSee($ownTx->reference);
+            ->assertOk()->assertSee(route('employee.transactions.show',$ownTx));
         $this->actingAs($employee)->get(route('employee.transactions.index',['agent'=>$otherAgent->id]))
-            ->assertOk()->assertDontSee($ownTx->reference);
+            ->assertOk()->assertDontSee(route('employee.transactions.show',$ownTx));
     }
 
     public function test_old_empty_draft_is_not_shown_in_history_or_agent_filter(): void
