@@ -304,7 +304,8 @@ Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsServic
                 $failed = true;
                 $this->error('Check.et: FAILED HTTP '.$response->status().' — the key was rejected or is missing read permission.');
             } elseif ($response->status() === 404) {
-                $this->warn('Check.et: Provider reached, but no documented read-only account/history endpoint was found. API key validity is UNVERIFIED; no payment was submitted.');
+                $failed = true;
+                $this->warn('Check.et: Provider reached, but a read-only account/history endpoint was not found. API key validity is UNVERIFIED; no payment was submitted.');
             } else {
                 $failed = true;
                 $this->error('Check.et: FAILED HTTP '.$response->status().'; inspect provider access, connectivity, and Laravel Cloud Logs.');
