@@ -1040,3 +1040,23 @@ button,.btn{transition:background .18s,border-color .18s,box-shadow .18s,transfo
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+/* Evidence-first transaction flow */
+.transaction-type-card{text-decoration:none;color:var(--text);outline-offset:4px}
+.transaction-type-card:focus-visible,.repayment-agent-choice:focus-visible{
+  outline:3px solid #7aa6ff;outline-offset:3px
+}
+.type-arrow{
+  margin-left:auto;display:grid;place-items:center;flex:0 0 28px;height:28px;
+  border-radius:9px;background:#eef4ff;color:#245dcc;font-size:17px;font-weight:800;
+  transition:transform .18s ease,background .18s ease
+}
+.transaction-type-card:hover .type-arrow,.repayment-agent-choice:hover .type-arrow{
+  transform:translateX(3px);background:#e1eaff
+}
+.repayment-agent-choice{gap:14px;border-radius:15px;min-height:75px}
+.repayment-agent-choice .activity-copy{min-width:0}
+@media(max-width:640px){
+  .transaction-type-card{min-height:92px}
+  .repayment-agent-choice .activity-copy small{font-size:10px}
+}
