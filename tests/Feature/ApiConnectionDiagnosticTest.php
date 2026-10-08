@@ -103,4 +103,29 @@ class ApiConnectionDiagnosticTest extends TestCase
             ->assertExitCode(1);
     }
 
+    public function test_gemini_diagnostic_uses_only_synthetic_content_and_no_check_et_verification(): void
+    {
+        config()->set('services.ai.driver','gemini');
+        config()->set('services.ai.gemini_api_key','example-gemini-key');
+        config()->set('services.ai.gemini_model','gemini-3.5-flash-lite');
+        config()->set('services.ai.gemini_allow_sensitive_evidence',false);
+        config()->set('services.check_et.api_key','example-check-key');
+
+        Http::fake([
+            'generativelanguage.googleapis.com/v1beta/models/*' => Http::response([
+                'candidates'=>[[
+                    'content'=>['parts'=>[['text'=>'AGENAUDIT']]],
+                ]],
+            ],200),
+            'api.check.et/api/v1/verifications*' => Http::response(['data'=>[]],200),
+        ]);
+
+        $this->artisan('agent-audit:test-apis')->assertExitCode(0);
+
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request) => str_contains($request->url(),'generativelanguage.googleapis.com')
+            && !str_contains(json_encode($request->data()),'receiver_account'));
+        Http::assertNotSent(fn ($request) => str_ends_with(parse_url($request->url(),PHP_URL_PATH) ?: '','/api/v1/verify'));
+    }
+
 }
