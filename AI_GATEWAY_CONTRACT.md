@@ -6,6 +6,16 @@ The AI layer only **extracts what is visible in screenshots**. It never decides 
 
 Set `AI_DRIVER=openai` for OpenAI Responses API, `AI_DRIVER=gemini` for the optional Gemini image adapter, or `AI_DRIVER=http` for a private/custom gateway.
 
+## Cloudflare Workers AI free allocation (preferred for sensitive proof testing)
+
+Use `AI_DRIVER=cloudflare`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_API_TOKEN`, and optional `CLOUDFLARE_AI_MODEL=@cf/meta/llama-3.2-11b-vision-instruct`. Cloudflare currently documents **10,000 free neurons per day** on Workers AI Free. Model costs and account limits determine how many screenshots that represents; do not assume unlimited requests. Free plans stop when the allowance is exhausted, rather than silently purchasing extra capacity.
+
+Cloudflare states it does not use Workers AI Customer Content for training or service improvements without permission. You must still evaluate data-processing agreements, regional requirements and Meta's model license before using real customer financial screenshots. The Llama Vision model requires accepting Meta's license on the account before use.
+
+The model accepts one image per call. For 2–5 agent-system proofs, Agenaudit creates an in-memory image collage, sends that one combined image, and immediately discards it. Original evidence files remain separate and private. Receipts from different bank transactions are **never** merged into a collage.
+
+Use `php artisan agent-audit:test-apis` to run a synthetic-image-only API diagnostic (no financial data). Model accuracy on local bank receipt typography is **not guaranteed**: run controlled tests before enabling production and keep Admin review for uncertainty.
+
 ## Free-tier Gemini and confidential financial evidence
 
 Google's Gemini API has limited free allowances (model availability varies). Google states its **unpaid services may use submitted content to improve products and may involve human review**. The free tier is therefore **not suitable by default for confidential bank receipts, phone numbers, and account screenshots**.
