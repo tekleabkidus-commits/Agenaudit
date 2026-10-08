@@ -109,7 +109,7 @@ class EvidenceFirstTransactionTest extends TestCase
         $this->actingAs($employee)->post(
             route('employee.transactions.initial-evidence.store',['type'=>'paid_topup']),
             []
-        )->assertSessionHasErrors('screenshot');
+        )->assertSessionHasErrors('screenshots');
 
         $this->assertDatabaseCount('transactions',0);
         $this->assertDatabaseCount('evidence_files',0);
@@ -123,7 +123,7 @@ class EvidenceFirstTransactionTest extends TestCase
 
         $this->actingAs($employee)->post(
             route('employee.transactions.initial-evidence.store',['type'=>'credit']),
-            ['screenshot'=>UploadedFile::fake()->image('agent.png')]
+            ['screenshots'=>[UploadedFile::fake()->image('agent.png')]]
         )->assertRedirect();
 
         $this->assertDatabaseCount('transactions',1);
@@ -200,4 +200,44 @@ class EvidenceFirstTransactionTest extends TestCase
 
         $this->assertDatabaseCount('transactions',0);
     }
+    public function test_multiple_agent_proof_images_create_one_transaction_and_one_processing_job(): void
+    {
+        Storage::fake('private');
+        Queue::fake();
+
+        $employee=$this->employee($this->brand());
+
+        $this->actingAs($employee)->post(
+            route('employee.transactions.initial-evidence.store',['type'=>'paid_topup']),
+            ['screenshots'=>[
+                UploadedFile::fake()->image('identity.png'),
+                UploadedFile::fake()->image('balance.png'),
+                UploadedFile::fake()->image('confirmation.png'),
+            ]]
+        )->assertRedirect();
+
+        $this->assertDatabaseCount('transactions',1);
+        $this->assertDatabaseCount('evidence_files',3);
+        $transaction=Transaction::firstOrFail();
+        $this->assertSame(TransactionStatus::Processing,$transaction->status);
+        $this->assertSame(3,$transaction->evidenceFiles()->where('kind',EvidenceKind::AgentSystem->value)->count());
+        Queue::assertPushed(ProcessEvidenceJob::class,1);
+    }
+
+    public function test_agent_proof_limit_is_enforced_without_creating_empty_transactions(): void
+    {
+        $employee=$this->employee($this->brand());
+
+        $files=[];
+        for($i=0;$i<6;$i++) $files[]=UploadedFile::fake()->image("proof-{$i}.png");
+
+        $this->actingAs($employee)->post(
+            route('employee.transactions.initial-evidence.store',['type'=>'credit']),
+            ['screenshots'=>$files]
+        )->assertSessionHasErrors('screenshots');
+
+        $this->assertDatabaseCount('transactions',0);
+        $this->assertDatabaseCount('evidence_files',0);
+    }
+
 }
