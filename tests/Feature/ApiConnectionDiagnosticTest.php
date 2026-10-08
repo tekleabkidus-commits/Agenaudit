@@ -192,4 +192,30 @@ class ApiConnectionDiagnosticTest extends TestCase
         });
     }
 
+    public function test_cloudflare_diagnostic_uses_synthetic_image_and_does_not_verify_a_bank_payment(): void
+    {
+        config()->set('services.ai.driver','cloudflare');
+        config()->set('services.ai.cloudflare_account_id','example-account');
+        config()->set('services.ai.cloudflare_api_token','example-token');
+        config()->set('services.ai.cloudflare_model','@cf/meta/llama-3.2-11b-vision-instruct');
+        config()->set('services.check_et.api_key','example-check-key');
+
+        Http::fake([
+            'api.cloudflare.com/client/v4/accounts/*' => Http::response([
+                'success'=>true,
+                'result'=>['response'=>'AGENAUDIT'],
+            ],200),
+            'api.check.et/api/v1/verifications*' => Http::response(['data'=>[]],200),
+        ]);
+
+        $this->artisan('agent-audit:test-apis')->assertExitCode(0);
+
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request) =>
+            str_contains($request->url(),'api.cloudflare.com')
+                && str_starts_with((string)$request['image'],'data:image/png;base64,'));
+        Http::assertNotSent(fn ($request) => str_ends_with(
+            parse_url($request->url(),PHP_URL_PATH) ?: '','/api/v1/verify'));
+    }
+
 }
