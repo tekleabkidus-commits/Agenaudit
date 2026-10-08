@@ -39,6 +39,19 @@ class AgentIdentityService
 
         $amount = round((float) data_get($extracted, 'amount'), 2);
         if ($amount <= 0) throw new ReviewRequiredException('invalid_agent_amount', 'Agent-system amount must be greater than zero.');
+        $beforeBalance = data_get($extracted, 'balance_before');
+        $afterBalance = data_get($extracted, 'balance_after');
+        if ($beforeBalance !== null && $afterBalance !== null && is_numeric($beforeBalance) && is_numeric($afterBalance)) {
+            $expectedDelta = $transaction->type === TransactionType::Withdrawal ? -$amount : $amount;
+            $actualDelta = round((float) $afterBalance - (float) $beforeBalance, 2);
+            if (abs($actualDelta - $expectedDelta) > 0.01) {
+                throw new ReviewRequiredException(
+                    'agent_balance_delta_mismatch',
+                    'Agent-system balance before/after does not reconcile to the extracted transaction amount.'
+                );
+            }
+        }
+
         try { $at = CarbonImmutable::parse((string) data_get($extracted, 'transaction_at')); }
         catch (Throwable) { throw new ReviewRequiredException('invalid_agent_time', 'Agent-system transaction time could not be parsed.'); }
 
