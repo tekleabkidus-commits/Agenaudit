@@ -231,13 +231,32 @@ Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsServic
 
             if (!$response->successful()) {
                 $failed = true;
-                $this->error('OpenAI: FAILED HTTP '.$response->status().'. '.match ($response->status()) {
-                    401 => 'API key is invalid or revoked.',
-                    403 => 'API project or model access denied.',
-                    404 => 'Endpoint or model is not available.',
-                    429 => 'Rate limit, billing, or quota restriction.',
+                // Only display well-known error codes. Never echo raw provider
+                // error text or headers because diagnostics must be safe to share.
+                $errorCode = (string) data_get($response->json(), 'error.code', '');
+                $errorType = (string) data_get($response->json(), 'error.type', '');
+                $quotaCodes = [
+                    'insufficient_quota', 'credit_balance_exhausted',
+                    'organization_usage_limit_exceeded',
+                    'organization_spend_limit_exceeded',
+                    'project_spend_limit_exceeded',
+                ];
+                $isQuota = in_array($errorCode, $quotaCodes, true)
+                    || in_array($errorType, $quotaCodes, true);
+                $isRateLimit = in_array($errorCode, ['rate_limit_exceeded'], true)
+                    || in_array($errorType, ['rate_limit_exceeded'], true);
+
+                $guidance = match (true) {
+                    $response->status() === 401 => 'API key is invalid or revoked.',
+                    $response->status() === 403 => 'API project or model access denied.',
+                    $response->status() === 404 => 'Endpoint or model is not available.',
+                    $response->status() === 429 && $isQuota => 'Quota/billing restriction. Check OpenAI API credits, organization and project spend/usage limits. Waiting or retrying will not solve a quota error.',
+                    $response->status() === 429 && $isRateLimit => 'Request/token rate limit. Wait, pace requests and check the OpenAI organization/project rate limits.',
+                    $response->status() === 429 => 'Could be billing, quota, or rate limits. Check the OpenAI API billing page and organization/project limits.',
                     default => 'Check model configuration, provider status, and Laravel Cloud Logs.',
-                });
+                };
+
+                $this->error('OpenAI: FAILED HTTP '.$response->status().'. '.$guidance);
             } else {
                 $body = $response->json();
                 $output = (string) data_get($body, 'output_text', '');
