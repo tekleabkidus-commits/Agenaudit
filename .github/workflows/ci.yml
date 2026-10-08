@@ -61,3 +61,51 @@ jobs:
           DB_DATABASE: ':memory:'
           CACHE_STORE: array
           SESSION_DRIVER: array
+
+  postgresql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: agent_audit_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, curl, xml, zip, pdo_pgsql, pgsql, gd, fileinfo, intl
+          coverage: none
+          tools: composer:v2
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Initialize PostgreSQL application
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+          php artisan migrate:fresh --force
+        env: &postgres_env
+          APP_ENV: testing
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5432'
+          DB_DATABASE: agent_audit_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: test_password
+          CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          AI_ENABLED: 'false'
+          CHECK_ET_ENABLED: 'false'
+      - name: Run PostgreSQL feature and unit tests
+        run: php artisan test
+        env: *postgres_env
