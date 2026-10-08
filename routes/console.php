@@ -159,3 +159,166 @@ Artisan::command('agent-audit:check-admin', function () {
     $this->info('Password check passed. These credentials are valid.');
     return self::SUCCESS;
 })->purpose('Verify Laravel Cloud bootstrap Admin credentials against the database');
+
+
+/**
+ * Production integration smoke test. Calls the configured providers using
+ * secrets already in Laravel Cloud. It never prints keys or response bodies,
+ * creates transactions, writes screenshots, or submits bank verifications.
+ */
+Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsService $settings) {
+    $failed = false;
+
+    $aiDriver = (string) config('services.ai.driver', 'http');
+    $aiEnabled = $settings->bool('ai.enabled', (bool) config('services.ai.enabled', false));
+    $aiKey = (string) config('services.ai.api_key', '');
+    $aiModel = (string) config('services.ai.model', '');
+
+    $this->info('Agenaudit API connection tests (credentials are never printed)');
+    $this->line('AI: Admin switch '.($aiEnabled ? 'ON' : 'OFF').'; driver '.$aiDriver.'; model '.($aiModel ?: 'not set'));
+
+    if (!$aiEnabled) {
+        $this->warn('AI automation is OFF in Admin Settings. The API can be connected but automatic evidence processing will stay disabled.');
+    }
+
+    if ($aiDriver !== 'openai') {
+        $this->warn('OpenAI direct test skipped: AI_DRIVER is not openai. The custom HTTP driver needs its own gateway test.');
+    } elseif ($aiKey === '' || $aiModel === '') {
+        $this->error('OpenAI: AI_API_KEY or AI_MODEL is missing.');
+        $failed = true;
+    } else {
+        try {
+            $base = rtrim((string) config('services.ai.base_url', 'https://api.openai.com/v1'), '/');
+            $message = [
+                'type' => 'input_text',
+                'text' => 'Read the text printed in the synthetic test image. Reply with exactly the letters you see and nothing else.',
+            ];
+            $input = [$message];
+            $visionAvailable = function_exists('imagecreatetruecolor') && function_exists('imagepng');
+
+            if ($visionAvailable) {
+                $img = imagecreatetruecolor(320, 128);
+                $white = imagecolorallocate($img, 255, 255, 255);
+                $black = imagecolorallocate($img, 0, 0, 0);
+                imagefilledrectangle($img, 0, 0, 319, 127, $white);
+                imagestring($img, 5, 60, 52, 'AGENAUDIT', $black);
+                ob_start();
+                imagepng($img);
+                $png = ob_get_clean();
+                imagedestroy($img);
+                $input[] = [
+                    'type'=>'input_image',
+                    'image_url'=>'data:image/png;base64,'.base64_encode($png),
+                    'detail'=>'high',
+                ];
+            } else {
+                $this->warn('GD extension is absent: testing text API connectivity only; image vision remains untested.');
+                $input[0]['text'] = 'Reply with the single word AGENAUDIT and nothing else.';
+            }
+
+            $response = \Illuminate\Support\Facades\Http::acceptJson()
+                ->withToken($aiKey)
+                ->timeout(30)
+                ->withoutRedirecting()
+                ->post($base.'/responses', [
+                    'model' => $aiModel,
+                    'input' => [[
+                        'role' => 'user',
+                        'content' => $input,
+                    ]],
+                    'max_output_tokens' => 48,
+                ]);
+
+            if (!$response->successful()) {
+                $failed = true;
+                $this->error('OpenAI: FAILED HTTP '.$response->status().'. '.match ($response->status()) {
+                    401 => 'API key is invalid or revoked.',
+                    403 => 'API project or model access denied.',
+                    404 => 'Endpoint or model is not available.',
+                    429 => 'Rate limit, billing, or quota restriction.',
+                    default => 'Check model configuration, provider status, and Laravel Cloud Logs.',
+                });
+            } else {
+                $body = $response->json();
+                $output = (string) data_get($body, 'output_text', '');
+                if ($output === '') {
+                    foreach ((array) data_get($body, 'output', []) as $item) {
+                        foreach ((array) data_get($item, 'content', []) as $part) {
+                            if (data_get($part, 'type') === 'output_text') {
+                                $output .= (string) data_get($part, 'text', '');
+                            }
+                        }
+                    }
+                }
+
+                if (strtoupper(trim($output, " \t\n\r\0\x0B.\"'")) === 'AGENAUDIT') {
+                    $this->info($visionAvailable
+                        ? 'OpenAI: PASS — key, model, Responses API and synthetic image reading.'
+                        : 'OpenAI: PASS — key, model and Responses API; image reading untested.');
+                } else {
+                    $failed = true;
+                    $this->error('OpenAI: API returned HTTP 200 but the diagnostic text did not match. Check the selected model and image support.');
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            $failed = true;
+            $this->error('OpenAI: FAILED due to network or runtime exception (details in Laravel Cloud Logs).');
+        }
+    }
+
+    $checkEnabled = $settings->bool('check_et.enabled', (bool) config('services.check_et.enabled', false));
+    $checkKey = (string) config('services.check_et.api_key', '');
+    $this->line('Check.et: Admin switch '.($checkEnabled ? 'ON' : 'OFF'));
+
+    if (!$checkEnabled) {
+        $this->warn('Check.et is OFF in Admin Settings. Secondary payment verification will not run.');
+    }
+
+    if ($checkKey === '') {
+        $failed = true;
+        $this->error('Check.et: CHECK_ET_API_KEY is missing.');
+    } else {
+        try {
+            $base = rtrim((string) config('services.check_et.base_url', 'https://api.check.et'), '/');
+            // Read-only API routes. Do not send a fake or real transaction to
+            // POST /verify: verification may spend quota and affect deduplication.
+            $response = \Illuminate\Support\Facades\Http::acceptJson()
+                ->withToken($checkKey)
+                ->withoutRedirecting()
+                ->timeout(12)
+                ->get($base.'/api/v1/verifications', ['limit'=>1]);
+
+            // Some deployments expose /accounts rather than /verifications.
+            if ($response->status() === 404) {
+                $response = \Illuminate\Support\Facades\Http::acceptJson()
+                    ->withToken($checkKey)
+                    ->withoutRedirecting()
+                    ->timeout(12)
+                    ->get($base.'/api/v1/accounts');
+            }
+
+            if ($response->successful()) {
+                $this->info('Check.et: PASS — authenticated read-only API request succeeded. Payment verification still requires a separate controlled test.');
+            } elseif (in_array($response->status(), [401, 403], true)) {
+                $failed = true;
+                $this->error('Check.et: FAILED HTTP '.$response->status().' — the key was rejected or is missing read permission.');
+            } elseif ($response->status() === 404) {
+                $this->warn('Check.et: Provider reached, but no documented read-only account/history endpoint was found. API key validity is UNVERIFIED; no payment was submitted.');
+            } else {
+                $failed = true;
+                $this->error('Check.et: FAILED HTTP '.$response->status().'; inspect provider access, connectivity, and Laravel Cloud Logs.');
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            $failed = true;
+            $this->error('Check.et: FAILED due to network or runtime exception (details in Laravel Cloud Logs).');
+        }
+    }
+
+    $this->newLine();
+    $this->line('No financial records or real customer evidence were created or sent during these diagnostics.');
+    $this->line('Full Check.et payment validation and the Laravel evidence queue require separate end-to-end testing.');
+
+    return $failed ? self::FAILURE : self::SUCCESS;
+})->purpose('Safely test configured OpenAI and Check.et API connections without exposing credentials or verifying payments');
