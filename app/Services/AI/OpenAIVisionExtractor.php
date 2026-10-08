@@ -97,7 +97,7 @@ class OpenAIVisionExtractor implements VisionExtractorInterface
         return null;
     }
 
-    private function prompt(EvidenceKind $kind): string
+    public function prompt(EvidenceKind $kind): string
     {
         $common = <<<'TEXT'
 You are the evidence-reading component of a financial audit system. Read only information that is visibly present in the uploaded screenshot. Never invent, infer, repair, or guess a value that is not reliably readable. Preserve masked account characters such as * exactly as visible where practical. Amounts must be numeric without currency symbols. transaction_at must be ISO-8601 with timezone when the screenshot explicitly provides enough information; otherwise use the most faithful ISO-like value possible and lower critical confidence. Quality score is overall screenshot readability from 0 to 1. Critical confidence is confidence in the fields required to validate the financial event. If a critical field is unreadable, return null for that field and lower critical_confidence so the system can request a clearer screenshot. Do not identify a brand from visual styling alone when an Agent ID/username can be read more reliably; brand_hint is only a hint. Return only the requested structured data.
@@ -110,7 +110,7 @@ TEXT;
         return $common."\nThis is a BANK/WALLET PAYMENT screenshot. Extract the institution the money came FROM and the institution it went TO separately, sender account/phone and full visible sender name when present, receiver account/phone and full receiver name, amount, bank transaction/reference ID, transaction timestamp, and visible status. Do not substitute the same bank for both sides unless the screenshot actually shows that.";
     }
 
-    private function schema(EvidenceKind $kind): array
+    public function schema(EvidenceKind $kind): array
     {
         $nullableString = ['anyOf' => [['type' => 'string'], ['type' => 'null']]];
         $nullableNumber = ['anyOf' => [['type' => 'number'], ['type' => 'null']]];
