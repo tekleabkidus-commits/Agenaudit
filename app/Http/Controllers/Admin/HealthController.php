@@ -30,8 +30,14 @@ class HealthController extends Controller
 
         $aiEnabled = $settings->bool('ai.enabled', (bool) config('services.ai.enabled'));
         $aiDriver = (string) config('services.ai.driver','openai');
-        $aiConfigured = filled(config('services.ai.api_key'))
-            && ($aiDriver !== 'http' || filled(config('services.ai.endpoint')));
+        $aiConfigured = match ($aiDriver) {
+            'gemini' => filled(config('services.ai.gemini_api_key')),
+            'http' => filled(config('services.ai.api_key')) && filled(config('services.ai.endpoint')),
+            'openai' => filled(config('services.ai.api_key')) && filled(config('services.ai.model')),
+            default => false,
+        };
+        $geminiPrivacyApproved = $aiDriver !== 'gemini'
+            || (bool) config('services.ai.gemini_allow_sensitive_evidence', false);
 
         $checkEnabled = $settings->bool('check_et.enabled', (bool) config('services.check_et.enabled'));
         $checkConfigured = filled(config('services.check_et.api_key'));
@@ -43,8 +49,14 @@ class HealthController extends Controller
                     'description'=>$disk.' disk'.($remoteStorageConfigured ? ' — remote disk configured; perform storage test' : ' — local disk; do not use for durable Cloud financial evidence')],
                 ['name'=>'Queue worker','status'=>'configured',
                     'description'=>'Queue connection: '.config('queue.default').'. Worker service health must be checked in Laravel Cloud'],
-                ['name'=>'AI screenshot extraction','status'=>!$aiEnabled?'optional':($aiConfigured?'configured':'warning'),
-                    'description'=>$aiEnabled ? ($aiConfigured?'Driver configured; real screenshot validation still required':'Enabled but missing server-side driver credentials') : 'Disabled; Admin manual extraction is required'],
+                ['name'=>'AI screenshot extraction','status'=>!$aiEnabled?'optional':($aiConfigured && $geminiPrivacyApproved?'configured':'warning'),
+                    'description'=>$aiEnabled
+                        ? (!$aiConfigured
+                            ? 'Enabled but missing server-side driver credentials'
+                            : (!$geminiPrivacyApproved
+                                ? 'Gemini free-tier privacy gate is OFF; real financial screenshots route to Admin manual extraction.'
+                                : 'Driver configured; real screenshot validation still required'))
+                        : 'Disabled; Admin manual extraction is required'],
                 ['name'=>'Check.et secondary verification','status'=>!$checkEnabled?'optional':($checkConfigured?'configured':'warning'),
                     'description'=>$checkEnabled ? ($checkConfigured?'Credentials configured; live bank verification still required':'Enabled without a server-side API key') : 'Disabled — internal verification remains active'],
             ],
