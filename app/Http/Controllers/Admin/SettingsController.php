@@ -26,7 +26,7 @@ class SettingsController extends Controller
 
                 'check_et.enabled'=>$settings->bool('check_et.enabled'),
                 'check_et.outage_mode'=>$settings->get('check_et.outage_mode','review'),
-                'check_et.failure_mode'=>$settings->get('check_et.failure_mode','review'),
+                'check_et.failure_mode'=>'review',
                 'check_et.timeout_seconds'=>$settings->int('check_et.timeout_seconds',8),
                 'check_et.retries'=>$settings->int('check_et.retries',1),
 
@@ -59,7 +59,7 @@ class SettingsController extends Controller
             'receiver_similarity'=>['required','numeric','between:0.5,1'],
 
             'check_et_outage_mode'=>['required','in:review,allow'],
-            'check_et_failure_mode'=>['required','in:review,allow'],
+            'check_et_failure_mode'=>['sometimes','in:review'],
             'check_et_timeout_seconds'=>['required','integer','min:2','max:60'],
             'check_et_retries'=>['required','integer','min:0','max:5'],
 
@@ -81,7 +81,7 @@ class SettingsController extends Controller
 
             'check_et.enabled'=>$request->boolean('check_et_enabled'),
             'check_et.outage_mode'=>$data['check_et_outage_mode'],
-            'check_et.failure_mode'=>$data['check_et_failure_mode'],
+            'check_et.failure_mode'=>'review',
             'check_et.timeout_seconds'=>(int)$data['check_et_timeout_seconds'],
             'check_et.retries'=>(int)$data['check_et_retries'],
 
