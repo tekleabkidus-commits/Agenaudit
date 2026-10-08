@@ -128,4 +128,19 @@ class ApiConnectionDiagnosticTest extends TestCase
         Http::assertNotSent(fn ($request) => str_ends_with(parse_url($request->url(),PHP_URL_PATH) ?: '','/api/v1/verify'));
     }
 
+    public function test_gemini_rejects_financial_evidence_without_explicit_data_policy_approval(): void
+    {
+        config()->set('services.ai.driver','gemini');
+        config()->set('services.ai.gemini_api_key','synthetic-placeholder');
+        config()->set('services.ai.gemini_allow_sensitive_evidence',false);
+
+        Http::fake();
+        $evidence=new \App\Models\EvidenceFile();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Gemini financial evidence uploads are disabled');
+
+        app(\App\Services\AI\GeminiVisionExtractor::class)->extract($evidence);
+    }
+
 }
