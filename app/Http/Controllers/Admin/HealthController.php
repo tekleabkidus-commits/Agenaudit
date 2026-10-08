@@ -32,6 +32,7 @@ class HealthController extends Controller
         $aiDriver = (string) config('services.ai.driver','openai');
         $aiConfigured = match ($aiDriver) {
             'gemini' => filled(config('services.ai.gemini_api_key')),
+            'cloudflare' => filled(config('services.ai.cloudflare_account_id')) && filled(config('services.ai.cloudflare_api_token')),
             'http' => filled(config('services.ai.api_key')) && filled(config('services.ai.endpoint')),
             'openai' => filled(config('services.ai.api_key')) && filled(config('services.ai.model')),
             default => false,
