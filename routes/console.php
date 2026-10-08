@@ -172,9 +172,11 @@ Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsServic
     $aiDriver = (string) config('services.ai.driver', 'http');
     $aiEnabled = $settings->bool('ai.enabled', (bool) config('services.ai.enabled', false));
     $aiKey = (string) config('services.ai.api_key', '');
-    $aiModel = $aiDriver === 'gemini'
-        ? (string) config('services.ai.gemini_model', 'gemini-3.5-flash-lite')
-        : (string) config('services.ai.model', '');
+    $aiModel = match ($aiDriver) {
+        'gemini' => (string)config('services.ai.gemini_model','gemini-3.5-flash-lite'),
+        'cloudflare' => (string)config('services.ai.cloudflare_model','@cf/meta/llama-3.2-11b-vision-instruct'),
+        default => (string)config('services.ai.model',''),
+    };
 
     $this->info('Agenaudit API connection tests (credentials are never printed)');
     $this->line('AI: Admin switch '.($aiEnabled ? 'ON' : 'OFF').'; driver '.$aiDriver.'; model '.($aiModel ?: 'not set'));
@@ -249,8 +251,64 @@ Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsServic
                 $this->error('Gemini: FAILED due to network or runtime exception. See Laravel Cloud Logs.');
             }
         }
+    } elseif ($aiDriver === 'cloudflare') {
+        $account=(string)config('services.ai.cloudflare_account_id','');
+        $token=(string)config('services.ai.cloudflare_api_token','');
+        $model=(string)config('services.ai.cloudflare_model','@cf/meta/llama-3.2-11b-vision-instruct');
+        $this->line('Cloudflare Workers AI: model '.$model);
+
+        if ($account==='' || $token==='') {
+            $failed=true;
+            $this->error('Cloudflare: CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_AI_API_TOKEN is missing.');
+        } else {
+            try {
+                $imageData=null;
+                if (function_exists('imagecreatetruecolor') && function_exists('imagepng')) {
+                    $img=imagecreatetruecolor(320,128);
+                    $white=imagecolorallocate($img,255,255,255);
+                    $black=imagecolorallocate($img,0,0,0);
+                    imagefilledrectangle($img,0,0,319,127,$white);
+                    imagestring($img,5,60,52,'AGENAUDIT',$black);
+                    ob_start();
+                    imagepng($img);
+                    $png=ob_get_clean();
+                    imagedestroy($img);
+                    $imageData='data:image/png;base64,'.base64_encode($png);
+                }
+
+                if ($imageData===null) {
+                    $failed=true;
+                    $this->error('Cloudflare: GD is missing, so a vision-capable smoke test could not be performed.');
+                } else {
+                    $response=\Illuminate\Support\Facades\Http::acceptJson()
+                        ->withToken($token)
+                        ->withoutRedirecting()
+                        ->timeout(30)
+                        ->post('https://api.cloudflare.com/client/v4/accounts/'.rawurlencode($account).'/ai/run/'.$model,[
+                            'messages'=>[
+                                ['role'=>'system','content'=>'Return only one word in uppercase.'],
+                                ['role'=>'user','content'=>'What word appears in this synthetic image?'],
+                            ],
+                            'image'=>$imageData,
+                            'max_tokens'=>80,
+                            'temperature'=>0,
+                        ]);
+                    if ($response->successful() && data_get($response->json(),'success',false)
+                        && str_contains(strtoupper((string)data_get($response->json(),'result.response','')),'AGENAUDIT')) {
+                        $this->info('Cloudflare: PASS — Workers AI key, model and synthetic image reading.');
+                    } else {
+                        $failed=true;
+                        $this->error('Cloudflare: FAILED HTTP '.$response->status().'. Check API token, available free neurons, model access and Meta license acceptance.');
+                    }
+                }
+            } catch (\Throwable $e) {
+                report($e);
+                $failed=true;
+                $this->error('Cloudflare: FAILED — network or runtime exception, details in Laravel Cloud logs.');
+            }
+        }
     } elseif ($aiDriver !== 'openai') {
-        $this->warn('OpenAI and Gemini tests skipped: custom HTTP driver needs its own gateway test.');
+        $this->warn('OpenAI, Gemini and Cloudflare tests skipped: custom HTTP gateway needs its own diagnostic.');
     } elseif ($aiKey === '' || $aiModel === '') {
         $this->error('OpenAI: AI_API_KEY or AI_MODEL is missing.');
         $failed = true;
