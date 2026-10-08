@@ -95,7 +95,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/', HomeController::class)->name('home');
         Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
         Route::get('/transactions/new', [TransactionController::class, 'create'])->name('transactions.create');
-        Route::post('/transactions', [TransactionController::class, 'store'])->name('transactions.store');
+        Route::get('/transactions/start/{type}', [TransactionController::class, 'start'])->name('transactions.start');
+        Route::get('/transactions/repayment/{agent}/evidence', [TransactionController::class, 'repaymentEvidence'])->name('transactions.repayment.evidence');
+        Route::post('/transactions/start/{type}/evidence', [TransactionController::class, 'storeInitialEvidence'])
+            ->middleware('throttle:uploads')->name('transactions.initial-evidence.store');
         Route::get('/transactions/{transaction}', [TransactionController::class, 'show'])->name('transactions.show');
         Route::post('/transactions/{transaction}/agent-evidence', [EvidenceController::class, 'agent'])->middleware('throttle:uploads')->name('transactions.agent-evidence');
         Route::post('/transactions/{transaction}/bank-evidence', [EvidenceController::class, 'banks'])->middleware('throttle:uploads')->name('transactions.bank-evidence');
