@@ -143,4 +143,46 @@ class ApiConnectionDiagnosticTest extends TestCase
         app(\App\Services\AI\GeminiVisionExtractor::class)->extract($evidence);
     }
 
+    public function test_cloudflare_vision_accepts_two_agent_proofs_as_a_private_collage(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('private');
+        config()->set('services.ai.cloudflare_account_id','test-account');
+        config()->set('services.ai.cloudflare_api_token','test-cloudflare-token');
+
+        Http::fake([
+            'api.cloudflare.com/client/v4/accounts/*' => Http::response([
+                'success'=>true,
+                'result'=>['response'=>json_encode([
+                    'quality'=>['score'=>.99,'critical_confidence'=>.99,'issues'=>[]],
+                    'agent_id'=>'A-123',
+                    'agent_username'=>'testagent',
+                    'amount'=>100,
+                    'transaction_at'=>'2026-10-08T10:00:00+03:00',
+                ])],
+            ],200),
+        ]);
+
+        $store=\Illuminate\Support\Facades\Storage::disk('private');
+        $store->put('proof-1.png',file_get_contents(\Illuminate\Http\UploadedFile::fake()->image('p1.png',220,120)->getRealPath()));
+        $store->put('proof-2.png',file_get_contents(\Illuminate\Http\UploadedFile::fake()->image('p2.png',220,120)->getRealPath()));
+
+        $first=new \App\Models\EvidenceFile([
+            'disk'=>'private','path'=>'proof-1.png','mime_type'=>'image/png',
+            'kind'=>\App\Enums\EvidenceKind::AgentSystem,
+        ]);
+        $second=new \App\Models\EvidenceFile([
+            'disk'=>'private','path'=>'proof-2.png','mime_type'=>'image/png',
+            'kind'=>\App\Enums\EvidenceKind::AgentSystem,
+        ]);
+
+        $payload=app(\App\Services\AI\CloudflareVisionExtractor::class)->extractMany([$first,$second]);
+        $this->assertEquals(100,$payload['amount']);
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(),'/ai/run/')
+                && str_starts_with((string)$request['image'],'data:image/png;base64,')
+                && str_contains((string)$request['messages'][1]['content'],'ONE agent transaction');
+        });
+    }
+
 }
