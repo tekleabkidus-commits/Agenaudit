@@ -1060,3 +1060,33 @@ button,.btn{transition:background .18s,border-color .18s,box-shadow .18s,transfo
   .transaction-type-card{min-height:92px}
   .repayment-agent-choice .activity-copy small{font-size:10px}
 }
+
+/* Brand commission controls and three-layer transaction history filter */
+.commission-brand-panel{
+  padding:0 16px;border:1px solid var(--line);border-radius:17px;
+  background:linear-gradient(140deg,#fff,#f9fbff);overflow:hidden
+}
+.commission-brand-panel+.commission-brand-panel{margin-top:10px}
+.commission-brand-panel>summary{
+  display:flex;align-items:center;gap:13px;cursor:pointer;list-style:none;
+  padding:15px 0;min-width:0
+}
+.commission-brand-panel>summary::-webkit-details-marker{display:none}
+.commission-brand-panel>summary .activity-copy{min-width:0;flex:1}
+.commission-brand-panel>summary .activity-copy b{font-size:13px}
+.commission-brand-panel>summary .activity-copy small{font-size:11px}
+.commission-brand-panel[open]{border-color:#b6c9ea;box-shadow:0 12px 30px rgba(33,91,232,.055)}
+.commission-brand-panel>form{
+  border-top:1px solid var(--line);padding:18px 0 20px;
+  max-width:650px
+}
+.commission-brand-panel .modern-switch{max-width:100%}
+.commission-brand-panel .type-arrow{margin-left:4px}
+.commission-brand-panel[open] .type-arrow{transform:rotate(180deg)}
+@media(max-width:700px){
+  .commission-brand-panel{padding-inline:13px}
+  .commission-brand-panel>summary{gap:9px}
+  .commission-brand-panel>summary .status-pill{white-space:nowrap}
+  .commission-brand-panel>form{padding-block:15px}
+  .filter-card .filters select[name=agent]{width:100%}
+}
