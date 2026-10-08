@@ -51,6 +51,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/corrections', [CorrectionReviewController::class, 'index'])->name('corrections.index');
         Route::get('/credits', [CreditController::class, 'index'])->name('credits.index');
         Route::get('/commissions', [CommissionController::class, 'index'])->name('commissions.index');
+        Route::put('/commissions/brands/{brand}', [CommissionController::class, 'updateBrand'])->name('commissions.brands.update');
         Route::put('/commissions/{agent}', [CommissionController::class, 'update'])->name('commissions.update');
         Route::post('/corrections/{correctionRequest}/approve', [CorrectionReviewController::class, 'approve'])->name('corrections.approve');
         Route::post('/corrections/{correctionRequest}/reject', [CorrectionReviewController::class, 'reject'])->name('corrections.reject');
