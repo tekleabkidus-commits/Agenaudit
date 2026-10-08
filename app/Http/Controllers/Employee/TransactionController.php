@@ -28,17 +28,38 @@ class TransactionController extends Controller
     public function index(Request $request): View
     {
         $brandIds = $request->user()->brands()->pluck('brands.id');
-        $transactions = Transaction::with(['agent','brand'])
-            ->where('employee_id',$request->user()->id)
+
+        $base = Transaction::query()
+            ->where('employee_id', $request->user()->id)
             ->where(function ($q) use ($brandIds) {
-                $q->whereNull('brand_id')->orWhereIn('brand_id',$brandIds);
+                $q->whereNull('brand_id')->orWhereIn('brand_id', $brandIds);
             })
-            ->when($request->filled('type'), fn($q)=>$q->where('type',$request->input('type')))
-            ->when($request->filled('status'), fn($q)=>$q->where('status',$request->input('status')))
+            // Old empty drafts remain in the audit trail but are not a
+            // transaction in Employee History until evidence exists.
+            ->where(function ($q) {
+                $q->where('status', '!=', TransactionStatus::Draft->value)
+                    ->orWhereHas('evidenceFiles');
+            });
+
+        $agentIds = (clone $base)->whereNotNull('agent_id')
+            ->distinct()->pluck('agent_id');
+
+        $agents = Agent::query()
+            ->with('brand')
+            ->whereIn('id', $agentIds)
+            ->orderBy('agent_id')
+            ->get();
+
+        $transactions = (clone $base)
+            ->with(['agent','brand'])
+            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->input('type')))
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->input('status')))
+            ->when($request->filled('agent') && ctype_digit((string) $request->input('agent')), fn ($q) => $q->where('agent_id', (int) $request->input('agent')))
             ->latest()
             ->paginate(25)
             ->withQueryString();
-        return view('employee.transactions.index', compact('transactions'));
+
+        return view('employee.transactions.index', compact('transactions', 'agents'));
     }
 
     /**
