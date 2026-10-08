@@ -37,7 +37,12 @@ class AgentController extends Controller
         $id=Normalizer::identifier($data['agent_id']); $user=Normalizer::identifier($data['username']);
         if (Agent::where('agent_id_normalized',$id)->exists()) return back()->withErrors(['agent_id'=>'Agent ID must be globally unique across all brands.'])->withInput();
         if (Agent::where('username_normalized',$user)->exists()) return back()->withErrors(['username'=>'Agent username must be globally unique across all brands.'])->withInput();
-        $agent=Agent::create(['brand_id'=>$data['brand_id'],'agent_id'=>$data['agent_id'],'agent_id_normalized'=>$id,'username'=>$data['username'],'username_normalized'=>$user,'credit_enabled'=>$request->boolean('credit_enabled',true),'credit_limit'=>$data['credit_limit']??null,'credit_due_days'=>$data['credit_due_days']??null,'commission_enabled'=>$request->boolean('commission_enabled'),'commission_monthly_limit'=>$data['commission_monthly_limit']??2,'is_active'=>true]);
+        $brand = Brand::findOrFail($data['brand_id']);
+        $commissionEnabled = $request->has('commission_enabled')
+            ? $request->boolean('commission_enabled')
+            : $brand->commission_enabled;
+        $commissionLimit = $data['commission_monthly_limit'] ?? $brand->commission_monthly_limit;
+        $agent=Agent::create(['brand_id'=>$data['brand_id'],'agent_id'=>$data['agent_id'],'agent_id_normalized'=>$id,'username'=>$data['username'],'username_normalized'=>$user,'credit_enabled'=>$request->boolean('credit_enabled',true),'credit_limit'=>$data['credit_limit']??null,'credit_due_days'=>$data['credit_due_days']??null,'commission_enabled'=>$commissionEnabled,'commission_monthly_limit'=>$commissionLimit,'is_active'=>true]);
         $audit->log('agent.created',$agent,null,$agent->toArray());
         return back()->with('success','Agent added.');
     }
