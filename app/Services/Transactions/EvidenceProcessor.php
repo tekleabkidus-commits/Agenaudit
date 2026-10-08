@@ -33,6 +33,16 @@ class EvidenceProcessor
     {
         $transaction = $evidence->transaction;
 
+        if ($this->isFinalized($transaction)) {
+            // Delayed jobs must never change financial evidence after closure.
+            $evidence->update([
+                'status'=>EvidenceStatus::Superseded,
+                'failure_reason'=>'Transaction was finalized before evidence processing.',
+            ]);
+            return;
+        }
+
+
         if (!$this->aiEnabledFor($evidence->kind)) {
             $evidence->update([
                 'status'=>EvidenceStatus::PendingAdminExtraction,
@@ -152,6 +162,10 @@ class EvidenceProcessor
 
     public function applyManualExtraction(EvidenceFile $evidence, array $payload, User $admin): void
     {
+        if ($this->isFinalized($evidence->transaction)) {
+            throw new RuntimeException('Finalized transactions cannot receive evidence.');
+        }
+
         if ($evidence->status !== EvidenceStatus::PendingAdminExtraction) {
             throw new RuntimeException('Manual extraction is only allowed when automatic extraction is disabled for this evidence.');
         }
@@ -185,6 +199,10 @@ class EvidenceProcessor
     {
         try {
             $transaction = $evidence->transaction->fresh(['brand','agent']);
+
+            if ($this->isFinalized($transaction)) {
+                throw new RuntimeException('Transaction was finalized before evidence could be applied.');
+            }
 
             if ($evidence->kind === EvidenceKind::AgentSystem) {
                 $this->agents->apply($transaction, $payload);
@@ -221,5 +239,14 @@ class EvidenceProcessor
         return $kind === EvidenceKind::AgentSystem
             ? $this->settings->bool('ai.agent_extraction_enabled', true)
             : $this->settings->bool('ai.bank_extraction_enabled', true);
+    }
+
+    private function isFinalized(\App\Models\Transaction $transaction): bool
+    {
+        return in_array($transaction->status, [
+            TransactionStatus::Completed,
+            TransactionStatus::Rejected,
+            TransactionStatus::Cancelled,
+        ], true);
     }
 }
