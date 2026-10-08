@@ -20,16 +20,41 @@ class EvidenceController extends Controller
     {
         $this->authorize('update',$transaction);
         abort_unless($transaction->type->requiresAgentScreenshot(),404);
-        $data = $request->validate(['screenshot'=>['required','file','mimetypes:image/jpeg,image/png,image/webp','max:'.config('agent_audit.evidence.max_kb',12288)]]);
-        $previous = $transaction->evidenceFiles()->where('kind',EvidenceKind::AgentSystem->value)->whereNull('superseded_by_id')->latest()->first();
-        if ($previous && !in_array($previous->status,[EvidenceStatus::NeedsReupload,EvidenceStatus::Failed],true)) {
-            throw ValidationException::withMessages(['screenshot'=>'An active agent-system screenshot already exists for this transaction.']);
+
+        $data=$request->validate([
+            'screenshots'=>['required','array','min:1','max:'.config('agent_audit.evidence.max_agent_proof_images_per_transaction',5)],
+            'screenshots.*'=>['required','file','mimetypes:image/jpeg,image/png,image/webp','max:'.config('agent_audit.evidence.max_kb',12288)],
+        ]);
+
+        $old=$transaction->evidenceFiles()->where('kind',EvidenceKind::AgentSystem->value)
+            ->whereNull('superseded_by_id')->orderBy('id')->get();
+
+        if ($old->isNotEmpty() && !$old->contains(fn ($item) =>
+            in_array($item->status,[EvidenceStatus::NeedsReupload,EvidenceStatus::Failed],true)
+        )) {
+            throw ValidationException::withMessages([
+                'screenshots'=>'Agent proof is already active. Replace proof images only when a clearer upload is requested.',
+            ]);
         }
-        $evidence = $storage->store($transaction,$data['screenshot'],EvidenceKind::AgentSystem);
-        if ($previous) $previous->update(['superseded_by_id'=>$evidence->id,'status'=>EvidenceStatus::Superseded]);
+
+        $first=null;
+        foreach ($data['screenshots'] as $file) {
+            $stored=$storage->store($transaction,$file,EvidenceKind::AgentSystem);
+            $first ??= $stored;
+        }
+
+        // Supersede the whole previous batch, retaining originals as audit history.
+        foreach ($old as $previous) {
+            $previous->update([
+                'superseded_by_id'=>$first->id,
+                'status'=>EvidenceStatus::Superseded,
+            ]);
+        }
+
         $transaction->update(['status'=>TransactionStatus::Processing,'review_reason'=>null]);
-        ProcessEvidenceJob::dispatch($evidence->id);
-        return back()->with('success','Agent-system screenshot uploaded and queued for automatic reading.');
+        ProcessEvidenceJob::dispatch($first->id);
+
+        return back()->with('success',count($data['screenshots']).' agent proof image(s) uploaded for combined AI reading.');
     }
 
     public function banks(Request $request, Transaction $transaction, EvidenceStorageService $storage): RedirectResponse
