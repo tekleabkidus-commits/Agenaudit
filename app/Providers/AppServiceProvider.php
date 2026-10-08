@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Services\AI\HttpVisionExtractor;
 use App\Services\AI\GeminiVisionExtractor;
+use App\Services\AI\CloudflareVisionExtractor;
 use App\Services\AI\OpenAIVisionExtractor;
 use App\Services\AI\VisionExtractorInterface;
 use Illuminate\Pagination\Paginator;
@@ -20,8 +21,9 @@ class AppServiceProvider extends ServiceProvider
             return match ((string) config('services.ai.driver', 'http')) {
                 'openai' => app(OpenAIVisionExtractor::class),
                 'gemini' => app(GeminiVisionExtractor::class),
+                'cloudflare' => app(CloudflareVisionExtractor::class),
                 'http' => app(HttpVisionExtractor::class),
-                default => throw new \RuntimeException('Unsupported AI_DRIVER. Use openai, gemini, or http.'),
+                default => throw new \RuntimeException('Unsupported AI_DRIVER. Use openai, cloudflare, gemini, or http.'),
             };
         });
     }
