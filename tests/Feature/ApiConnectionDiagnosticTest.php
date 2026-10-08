@@ -163,8 +163,15 @@ class ApiConnectionDiagnosticTest extends TestCase
         ]);
 
         $store=\Illuminate\Support\Facades\Storage::disk('private');
-        $store->put('proof-1.png',file_get_contents(\Illuminate\Http\UploadedFile::fake()->image('p1.png',220,120)->getRealPath()));
-        $store->put('proof-2.png',file_get_contents(\Illuminate\Http\UploadedFile::fake()->image('p2.png',220,120)->getRealPath()));
+        $img=imagecreatetruecolor(220,120);
+        $white=imagecolorallocate($img,255,255,255);
+        imagefill($img,0,0,$white);
+        ob_start();
+        imagepng($img);
+        $png=ob_get_clean();
+        imagedestroy($img);
+        $store->put('proof-1.png',$png);
+        $store->put('proof-2.png',$png);
 
         $first=new \App\Models\EvidenceFile([
             'disk'=>'private','path'=>'proof-1.png','mime_type'=>'image/png',
