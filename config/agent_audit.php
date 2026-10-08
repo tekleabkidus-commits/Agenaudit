@@ -13,6 +13,7 @@ return [
         'max_kb' => 12288,
         'allowed_mimes' => ['image/jpeg', 'image/png', 'image/webp'],
         'max_bank_screenshots_per_transaction' => 12,
+        'max_agent_proof_images_per_transaction' => 5,
     ],
     'hard_non_correctable_fields' => [
         'receiver_bank',
