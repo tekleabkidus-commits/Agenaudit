@@ -55,4 +55,52 @@ class ApiConnectionDiagnosticTest extends TestCase
         $this->artisan('agent-audit:test-apis')->assertExitCode(1);
         Http::assertSentCount(2);
     }
+    public function test_api_diagnostic_distinguishes_billing_quota_from_rate_limit(): void
+    {
+        config()->set('services.ai.driver', 'openai');
+        config()->set('services.ai.api_key', 'placeholder-private');
+        config()->set('services.ai.model', 'gpt-4.1-mini');
+        config()->set('services.ai.base_url', 'https://api.openai.com/v1');
+        config()->set('services.check_et.api_key', 'placeholder-check');
+        config()->set('services.check_et.base_url', 'https://api.check.et');
+
+        Http::fake([
+            'api.openai.com/v1/responses' => Http::response([
+                'error'=>[
+                    'type'=>'insufficient_quota',
+                    'code'=>'credit_balance_exhausted',
+                    'message'=>'Billing limit; do not reveal this message.',
+                ],
+            ], 429),
+            'api.check.et/api/v1/verifications*' => Http::response(['data'=>[]], 200),
+        ]);
+
+        $this->artisan('agent-audit:test-apis')
+            ->expectsOutput('OpenAI: FAILED HTTP 429. Quota/billing restriction. Check OpenAI API credits, organization and project spend/usage limits. Waiting or retrying will not solve a quota error.')
+            ->assertExitCode(1);
+
+        Http::assertSentCount(2);
+    }
+
+    public function test_api_diagnostic_distinguishes_temporary_rate_limit(): void
+    {
+        config()->set('services.ai.driver', 'openai');
+        config()->set('services.ai.api_key', 'placeholder-private');
+        config()->set('services.ai.model', 'gpt-4.1-mini');
+        config()->set('services.ai.base_url', 'https://api.openai.com/v1');
+        config()->set('services.check_et.api_key', 'placeholder-check');
+        config()->set('services.check_et.base_url', 'https://api.check.et');
+
+        Http::fake([
+            'api.openai.com/v1/responses' => Http::response([
+                'error'=>['code'=>'rate_limit_exceeded','type'=>'rate_limit_exceeded'],
+            ], 429),
+            'api.check.et/api/v1/verifications*' => Http::response(['data'=>[]], 200),
+        ]);
+
+        $this->artisan('agent-audit:test-apis')
+            ->expectsOutput('OpenAI: FAILED HTTP 429. Request/token rate limit. Wait, pace requests and check the OpenAI organization/project rate limits.')
+            ->assertExitCode(1);
+    }
+
 }
