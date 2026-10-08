@@ -43,15 +43,21 @@
             <div class="form-grid">
                 <div class="field">
                     <label>Brand</label>
-                    <select class="select" name="brand_id" required>
-                        @foreach($brands as $brand)<option value="{{ $brand->id }}">{{ $brand->name }}</option>@endforeach
+                    <select class="select" name="brand_id" id="new-agent-brand" required>
+                        @foreach($brands as $brand)
+                            <option value="{{ $brand->id }}"
+                                data-commission-enabled="{{ $brand->commission_enabled ? '1' : '0' }}"
+                                data-commission-limit="{{ $brand->commission_monthly_limit }}">
+                                {{ $brand->name }}
+                            </option>
+                        @endforeach
                     </select>
                 </div>
                 <div class="field"><label>Agent ID</label><input class="input" name="agent_id" required></div>
                 <div class="field"><label>Agent username</label><input class="input" name="username" required></div>
                 <div class="field"><label>Credit limit</label><input class="input" type="number" step=".01" min="0" name="credit_limit" placeholder="Unlimited if blank"></div>
                 <div class="field"><label>Credit due days</label><input class="input" type="number" min="0" max="365" name="credit_due_days" placeholder="Use platform default"></div>
-                <div class="field"><label>Commission uses / month</label><input class="input" type="number" min="1" max="31" name="commission_monthly_limit" value="2"></div>
+                <div class="field"><label>Commission uses / month</label><input class="input" type="number" min="1" max="31" name="commission_monthly_limit" id="new-agent-commission-limit" value="{{ $brands->first()?->commission_monthly_limit ?? 2 }}"></div>
             </div>
 
             <div class="toggle-grid">
@@ -61,7 +67,7 @@
                 </label>
                 <label class="setting-row">
                     <span><b>Commission Deposit</b><small>Admin-controlled. Employee can use it only while ON.</small></span>
-                    <span class="modern-switch compact"><input type="checkbox" name="commission_enabled" value="1"><span class="modern-switch-ui"></span></span>
+                    <span class="modern-switch compact"><input type="hidden" name="commission_enabled" value="0"><input type="checkbox" id="new-agent-commission-enabled" name="commission_enabled" value="1" @checked($brands->first()?->commission_enabled)><span class="modern-switch-ui"></span></span>
                 </label>
             </div>
 
@@ -90,8 +96,8 @@
                         <td><span class="brand-chip">{{ $agent->brand->name }}</span></td>
                         <td><b>{{ number_format($agent->outstanding_credit,2) }}</b> <span class="tiny muted">ETB</span></td>
                         <td>
-                            <span class="status-pill {{ $agent->commission_enabled?'success':'neutral' }}">
-                                {{ $agent->commission_enabled?'ON':'OFF' }}
+                            <span class="status-pill {{ $agent->commission_enabled && $agent->brand->commission_enabled ? 'success' : 'neutral' }}">
+                                {{ $agent->brand->commission_enabled ? ($agent->commission_enabled ? 'ON' : 'Agent OFF') : 'Brand OFF' }}
                             </span>
                         </td>
                         <td><a class="btn btn-sm btn-outline" href="{{ route('admin.agents.edit',$agent) }}">Manage</a></td>
@@ -105,4 +111,18 @@
         {{ $agents->links() }}
     </section>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const brand = document.getElementById('new-agent-brand');
+    const enabled = document.getElementById('new-agent-commission-enabled');
+    const limit = document.getElementById('new-agent-commission-limit');
+
+    brand?.addEventListener('change', function () {
+        const selected = brand.selectedOptions[0];
+        if (!selected) return;
+        enabled.checked = selected.dataset.commissionEnabled === '1';
+        limit.value = selected.dataset.commissionLimit || '2';
+    });
+});
+</script>
 @endsection
