@@ -201,7 +201,11 @@ class EvidenceProcessor
             $transaction = $evidence->transaction->fresh(['brand','agent']);
 
             if ($this->isFinalized($transaction)) {
-                throw new RuntimeException('Transaction was finalized before evidence could be applied.');
+                $evidence->update([
+                    'status'=>EvidenceStatus::Superseded,
+                    'failure_reason'=>'Transaction was finalized before evidence could be applied.',
+                ]);
+                return;
             }
 
             if ($evidence->kind === EvidenceKind::AgentSystem) {
