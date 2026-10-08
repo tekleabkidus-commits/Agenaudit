@@ -15,6 +15,9 @@ return [
         'gemini_model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
         'gemini_base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
         'gemini_allow_sensitive_evidence' => (bool) env('GEMINI_ALLOW_SENSITIVE_EVIDENCE', false),
+        'cloudflare_account_id' => env('CLOUDFLARE_ACCOUNT_ID'),
+        'cloudflare_api_token' => env('CLOUDFLARE_AI_API_TOKEN'),
+        'cloudflare_model' => env('CLOUDFLARE_AI_MODEL', '@cf/meta/llama-3.2-11b-vision-instruct'),
     ],
     'check_et' => [
         'enabled' => (bool) env('CHECK_ET_ENABLED', false),
