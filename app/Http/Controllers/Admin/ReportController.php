@@ -220,31 +220,43 @@ class ReportController extends Controller
     public function export(Request $request)
     {
         [$query] = $this->filtered($request);
-        $rows = $query->latest('completed_at')->get();
 
-        return Response::streamDownload(function() use($rows) {
+        // Stream bounded chunks instead of loading the whole financial
+        // history into PHP memory. Eager loading occurs per chunk.
+        return Response::streamDownload(function () use ($query) {
             $handle = fopen('php://output','w');
-            fputcsv($handle,[
+            if (!$handle) throw new \RuntimeException('Cannot open CSV export stream.');
+
+            $safe = static function ($value): string {
+                $text = (string) ($value ?? '');
+                // Prevent spreadsheet formula injection from untrusted names/IDs.
+                return preg_match('/^[\\s]*[=+\\-@]/u', $text) ? "'".$text : $text;
+            };
+
+            fputcsv($handle, [
                 'Reference','Type','Brand','Agent ID','Username','Employee',
-                'Amount','Valid Payments','Risk','Completed'
+                'Amount','Valid Payments','Risk','Completed',
             ]);
 
-            foreach($rows as $transaction) {
-                fputcsv($handle,[
-                    $transaction->reference,
-                    $transaction->type->value,
-                    $transaction->brand?->name,
-                    $transaction->agent?->agent_id,
-                    $transaction->agent?->username,
-                    $transaction->employee?->name,
-                    $transaction->amount,
-                    $transaction->valid_payment_total,
-                    $transaction->risk_level?->value,
-                    $transaction->completed_at?->toIso8601String(),
-                ]);
-            }
+            $query->reorder()->chunkById(250, function ($transactions) use ($handle,$safe) {
+                foreach ($transactions as $transaction) {
+                    fputcsv($handle, [
+                        $safe($transaction->reference),
+                        $safe($transaction->type->value),
+                        $safe($transaction->brand?->name),
+                        $safe($transaction->agent?->agent_id),
+                        $safe($transaction->agent?->username),
+                        $safe($transaction->employee?->name),
+                        $transaction->amount,
+                        $transaction->valid_payment_total,
+                        $safe($transaction->risk_level?->value),
+                        $transaction->completed_at?->toIso8601String(),
+                    ]);
+                }
+            });
 
             fclose($handle);
-        },'agent-audit-report.csv',['Content-Type'=>'text/csv']);
+        }, 'agent-audit-report.csv', ['Content-Type'=>'text/csv; charset=UTF-8']);
     }
+
 }
