@@ -16,6 +16,7 @@ use App\Services\Banking\BankResolver;
 use App\Services\Banking\PaymentVerificationService;
 use App\Support\Normalizer;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class CorrectionService
@@ -41,6 +42,7 @@ class CorrectionService
 
     public function approve(CorrectionRequest $request, User $admin, ?string $note = null): CorrectionRequest
     {
+        return DB::transaction(function () use ($request, $admin, $note) {
         if ($request->status !== CorrectionStatus::Pending) throw new RuntimeException('Correction request is no longer pending.');
         if (in_array($request->field_name, config('agent_audit.hard_non_correctable_fields', []), true)) throw new RuntimeException('Hard receiving-account fields can never be corrected.');
 
@@ -69,6 +71,7 @@ class CorrectionService
         $this->audit->log('correction.approved', $request, ['ai_value'=>$request->ai_value], ['proposed_value'=>$value,'note'=>$note], [], $admin);
         $this->workflow->recalculate($transaction->fresh());
         return $request->fresh();
+        }, 3);
     }
 
     public function reject(CorrectionRequest $request, User $admin, string $note, bool $needsScreenshot = false): CorrectionRequest
