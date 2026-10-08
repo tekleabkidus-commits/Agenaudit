@@ -27,8 +27,16 @@
                     <option value="{{ $status->value }}" @selected(request('status')===$status->value)>{{ str($status->value)->replace('_',' ')->title() }}</option>
                 @endforeach
             </select>
+            <select class="select" name="agent" aria-label="Filter by agent">
+                <option value="">All agents</option>
+                @foreach($agents as $agent)
+                    <option value="{{ $agent->id }}" @selected(request('agent')==(string)$agent->id)>
+                        {{ $agent->agent_id }} · {{ $agent->username }} · {{ $agent->brand?->name }}
+                    </option>
+                @endforeach
+            </select>
             <button class="btn btn-primary">Filter</button>
-            @if(request()->hasAny(['type','status']))<a class="btn btn-ghost" href="{{ route('employee.transactions.index') }}">Reset</a>@endif
+            @if(request()->hasAny(['type','status','agent']))<a class="btn btn-ghost" href="{{ route('employee.transactions.index') }}">Reset</a>@endif
         </form>
     </div>
 
