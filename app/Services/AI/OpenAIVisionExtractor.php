@@ -12,6 +12,13 @@ class OpenAIVisionExtractor implements VisionExtractorInterface
 {
     public function extract(EvidenceFile $evidence): array
     {
+        return $this->extractMany([$evidence]);
+    }
+
+    public function extractMany(array $evidences): array
+    {
+        if ($evidences === []) throw new RuntimeException('At least one evidence image is required.');
+
         $key = (string) config('services.ai.api_key');
         $model = (string) config('services.ai.model');
         $baseUrl = rtrim((string) config('services.ai.base_url', 'https://api.openai.com/v1'), '/');
@@ -20,36 +27,39 @@ class OpenAIVisionExtractor implements VisionExtractorInterface
             throw new RuntimeException('OpenAI AI driver is not configured. AI_API_KEY and AI_MODEL are required.');
         }
 
-        $bytes = Storage::disk($evidence->disk)->get($evidence->path);
-        if ($bytes === '' || $bytes === false) {
-            throw new RuntimeException('Evidence file could not be read.');
-        }
+        $kind = $evidences[0]->kind;
+        $content = [[
+            'type'=>'input_text',
+            'text'=>$this->prompt($kind).(count($evidences)>1
+                ? "\nThe following images are supplementary views of the SAME agent transaction. Cross-check identity, amount and time across images. If images disagree on a critical value, report low confidence. Never add or double-count amounts from repeated screenshots."
+                : ''),
+        ]];
 
-        $mime = in_array($evidence->mime_type, ['image/jpeg', 'image/png', 'image/webp'], true)
-            ? $evidence->mime_type
-            : 'image/jpeg';
-        $dataUrl = 'data:'.$mime.';base64,'.base64_encode($bytes);
+        foreach ($evidences as $evidence) {
+            if ($evidence->kind !== $kind) throw new RuntimeException('Cannot combine different kinds of evidence.');
+            $bytes = Storage::disk($evidence->disk)->get($evidence->path);
+            if ($bytes === '' || $bytes === false) throw new RuntimeException('Evidence file could not be read.');
+            $mime = in_array($evidence->mime_type,['image/jpeg','image/png','image/webp'],true)
+                ? $evidence->mime_type : 'image/jpeg';
+            $content[] = [
+                'type'=>'input_image',
+                'image_url'=>'data:'.$mime.';base64,'.base64_encode($bytes),
+                'detail'=>'high',
+            ];
+        }
 
         $response = Http::timeout((int) config('services.ai.timeout', 45))
             ->acceptJson()
             ->withToken($key)
             ->post($baseUrl.'/responses', [
-                'model' => $model,
-                'input' => [[
-                    'role' => 'user',
-                    'content' => [
-                        ['type' => 'input_text', 'text' => $this->prompt($evidence->kind)],
-                        ['type' => 'input_image', 'image_url' => $dataUrl, 'detail' => 'high'],
-                    ],
+                'model'=>$model,
+                'input'=>[['role'=>'user','content'=>$content]],
+                'text'=>['format'=>[
+                    'type'=>'json_schema',
+                    'name'=>$kind === EvidenceKind::AgentSystem ? 'agent_system_evidence' : 'bank_payment_evidence',
+                    'strict'=>true,
+                    'schema'=>$this->schema($kind),
                 ]],
-                'text' => [
-                    'format' => [
-                        'type' => 'json_schema',
-                        'name' => $evidence->kind === EvidenceKind::AgentSystem ? 'agent_system_evidence' : 'bank_payment_evidence',
-                        'strict' => true,
-                        'schema' => $this->schema($evidence->kind),
-                    ],
-                ],
             ]);
 
         if (!$response->successful()) {
@@ -57,20 +67,13 @@ class OpenAIVisionExtractor implements VisionExtractorInterface
         }
 
         $body = $response->json();
-        if (!is_array($body)) {
-            throw new RuntimeException('OpenAI extraction returned an invalid response.');
-        }
-
+        if (!is_array($body)) throw new RuntimeException('OpenAI extraction returned an invalid response.');
         $text = $this->extractOutputText($body);
-        if ($text === null || trim($text) === '') {
-            throw new RuntimeException('OpenAI extraction returned no structured output.');
-        }
-
-        $decoded = json_decode($text, true);
+        if ($text === null || trim($text) === '') throw new RuntimeException('OpenAI extraction returned no structured output.');
+        $decoded = json_decode($text,true);
         if (!is_array($decoded) || json_last_error() !== JSON_ERROR_NONE) {
             throw new RuntimeException('OpenAI extraction returned malformed structured JSON.');
         }
-
         return $decoded;
     }
 
