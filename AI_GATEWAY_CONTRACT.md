@@ -4,7 +4,21 @@ The AI layer only **extracts what is visible in screenshots**. It never decides 
 
 ## Drivers
 
-Set `AI_DRIVER=openai` to use the included direct OpenAI Responses API adapter, or `AI_DRIVER=http` to use a private/custom gateway that implements this contract.
+Set `AI_DRIVER=openai` for OpenAI Responses API, `AI_DRIVER=gemini` for the optional Gemini image adapter, or `AI_DRIVER=http` for a private/custom gateway.
+
+## Free-tier Gemini and confidential financial evidence
+
+Google's Gemini API has limited free allowances (model availability varies). Google states its **unpaid services may use submitted content to improve products and may involve human review**. The free tier is therefore **not suitable by default for confidential bank receipts, phone numbers, and account screenshots**.
+
+For permitted synthetic tests, set `AI_DRIVER=gemini`, `GEMINI_API_KEY`, and `GEMINI_MODEL=gemini-3.5-flash-lite`. Real Agent Audit evidence remains blocked by `GEMINI_ALLOW_SENSITIVE_EVIDENCE=false` and goes to Admin manual extraction. Enabling the sensitive-data switch requires an explicit independent privacy/legal approval of the provider's terms and the user's rights over the data. For production private financial evidence, use a provider with appropriate terms or a private self-hosted OCR/vision gateway.
+
+## Multi-image proof batches
+
+Agent-system proof uploads accept **1–5 images of the same transaction**. The backend stores each image immutably under the same transaction but queues **one combined extraction** for all active agent proof images. The extractor must produce ONE amount, identity, timestamp, and set of balances: never sum repeated amounts from agent screenshots.
+
+Each bank screenshot is instead verified independently, with a distinct transaction number, date and amount, and can contribute to the bank receipt total only once.
+
+For `AI_DRIVER=http`: one screenshot retains multipart `file` input. Multi-image agent batches send multipart `files[]` plus `image_count` to the gateway. The gateway must implement the same grouped extraction and conflict rule.
 
 All AI calls are server-side. API credentials are never exposed to the employee browser.
 
