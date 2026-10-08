@@ -39,6 +39,7 @@ class NavigationSmokeTest extends TestCase
             'admin.sessions.index',
             'admin.audit.index',
             'admin.settings.edit',
+            'admin.health.index',
             'profile.edit',
         ] as $routeName) {
             $this->get(route($routeName))
