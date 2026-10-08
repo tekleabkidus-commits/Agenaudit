@@ -4,11 +4,12 @@
 @section('content')
 
 @php
-    $agentEvidence = $transaction->evidenceFiles
+    $agentProofs = $transaction->evidenceFiles
         ->where('kind',App\Enums\EvidenceKind::AgentSystem)
         ->whereNull('superseded_by_id')
-        ->sortByDesc('id')
-        ->first();
+        ->sortBy('id')
+        ->values();
+    $agentEvidence = $agentProofs->first();
 
     $pendingBankEvidence = $transaction->evidenceFiles
         ->where('kind',App\Enums\EvidenceKind::BankPayment)
@@ -82,9 +83,9 @@
                     @csrf
                     <label class="upload-zone">
                         <span class="upload-icon">↑</span>
-                        <b>Choose agent-system screenshot</b>
-                        <small>Clear JPEG, PNG or WebP. AI reads ID, username, amount, balances and time.</small>
-                        <input type="file" name="screenshot" accept="image/*" required>
+                        <b>Choose agent-system proof images</b>
+                        <small>Upload up to {{ config('agent_audit.evidence.max_agent_proof_images_per_transaction',5) }} screenshots of the same transaction. AI reads them together.</small>
+                        <input type="file" name="screenshots[]" accept="image/jpeg,image/png,image/webp" multiple required>
                     </label>
                     <button class="btn btn-primary btn-lg">Upload & Analyze</button>
                 </form>
@@ -123,7 +124,7 @@
                 </div>
             @else
                 <div class="status-line">
-                    <span><b>Screenshot processed</b><small class="muted">Quality {{ $agentEvidence->quality_score?round($agentEvidence->quality_score*100).'%':'—' }}</small></span>
+                    <span><b>Proof images processed</b><small class="muted">Quality {{ $agentEvidence->quality_score?round($agentEvidence->quality_score*100).'%':'—' }}</small></span>
                     <span class="status-pill success">{{ str($agentEvidence->status->value)->replace('_',' ')->title() }}</span>
                 </div>
 
@@ -145,6 +146,20 @@
                 @endif
 
                 <a class="btn btn-sm btn-outline" style="margin-top:12px" href="{{ route('evidence.show',$agentEvidence) }}" target="_blank">View Screenshot</a>
+            @endif
+            @if($agentProofs->count() > 1)
+                <div style="margin-top:14px">
+                    <span class="eyebrow">{{ $agentProofs->count() }} RELATED PROOF IMAGES</span>
+                    <div class="proof-gallery">
+                        @foreach($agentProofs as $proof)
+                            <a href="{{ route('evidence.show',$proof) }}" target="_blank" rel="noopener" class="proof-gallery-item">
+                                <img src="{{ route('evidence.show',$proof) }}" alt="Agent proof {{ $loop->iteration }}" loading="lazy">
+                                <span>Proof {{ $loop->iteration }}</span>
+                            </a>
+                        @endforeach
+                    </div>
+                    <p class="tiny muted">The AI combines these as evidence for one transaction. Amounts are not added together.</p>
+                </div>
             @endif
         </section>
     @endif
