@@ -53,20 +53,20 @@
     @endif
 
     @if($transaction->type === App\Enums\TransactionType::Commission && $transaction->agent)
-        <section class="card commission-eligibility {{ $transaction->agent->commission_enabled ? 'enabled' : 'disabled' }}">
+        <section class="card commission-eligibility {{ $transaction->agent->commission_enabled && $transaction->agent->brand?->commission_enabled ? 'enabled' : 'disabled' }}">
             <div class="card-title-row">
                 <div>
                     <span class="eyebrow">COMMISSION ELIGIBILITY</span>
-                    <h3>{{ $transaction->agent->commission_enabled ? 'Commission Deposit is enabled' : 'Commission Deposit is disabled' }}</h3>
+                    <h3>{{ $transaction->agent->commission_enabled && $transaction->agent->brand?->commission_enabled ? 'Commission Deposit is enabled' : 'Commission Deposit is disabled by brand or agent' }}</h3>
                 </div>
-                <span class="status-pill {{ $transaction->agent->commission_enabled?'success':'danger' }}">{{ $transaction->agent->commission_enabled?'ON':'OFF' }}</span>
+                <span class="status-pill {{ $transaction->agent->commission_enabled && $transaction->agent->brand?->commission_enabled?'success':'danger' }}">{{ $transaction->agent->commission_enabled && $transaction->agent->brand?->commission_enabled?'ON':'OFF' }}</span>
             </div>
             <div class="mini-stat-row">
                 <div><span>Used this month</span><b>{{ $commissionUsedThisMonth ?? 0 }}</b></div>
                 <div><span>Monthly limit</span><b>{{ $transaction->agent->commission_monthly_limit }}</b></div>
                 <div><span>Remaining</span><b>{{ $commissionRemainingThisMonth ?? 0 }}</b></div>
             </div>
-            <div class="tiny muted">Only Admin can turn Commission Deposit on/off for this agent.</div>
+            <div class="tiny muted">Only Admin can enable Commission Deposit at both brand and agent level.</div>
         </section>
     @endif
 
