@@ -11,6 +11,10 @@ return [
         'timeout' => (int) env('AI_TIMEOUT_SECONDS', 45),
         'min_quality_score' => (float) env('AI_MIN_QUALITY_SCORE', 0.80),
         'min_critical_confidence' => (float) env('AI_MIN_CRITICAL_CONFIDENCE', 0.85),
+        'gemini_api_key' => env('GEMINI_API_KEY'),
+        'gemini_model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
+        'gemini_base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
+        'gemini_allow_sensitive_evidence' => (bool) env('GEMINI_ALLOW_SENSITIVE_EVIDENCE', false),
     ],
     'check_et' => [
         'enabled' => (bool) env('CHECK_ET_ENABLED', false),
