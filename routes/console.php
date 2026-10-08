@@ -172,7 +172,9 @@ Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsServic
     $aiDriver = (string) config('services.ai.driver', 'http');
     $aiEnabled = $settings->bool('ai.enabled', (bool) config('services.ai.enabled', false));
     $aiKey = (string) config('services.ai.api_key', '');
-    $aiModel = (string) config('services.ai.model', '');
+    $aiModel = $aiDriver === 'gemini'
+        ? (string) config('services.ai.gemini_model', 'gemini-3.5-flash-lite')
+        : (string) config('services.ai.model', '');
 
     $this->info('Agenaudit API connection tests (credentials are never printed)');
     $this->line('AI: Admin switch '.($aiEnabled ? 'ON' : 'OFF').'; driver '.$aiDriver.'; model '.($aiModel ?: 'not set'));
@@ -181,8 +183,74 @@ Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsServic
         $this->warn('AI automation is OFF in Admin Settings. The API can be connected but automatic evidence processing will stay disabled.');
     }
 
-    if ($aiDriver !== 'openai') {
-        $this->warn('OpenAI direct test skipped: AI_DRIVER is not openai. The custom HTTP driver needs its own gateway test.');
+    if ($aiDriver === 'gemini') {
+        $geminiKey=(string)config('services.ai.gemini_api_key','');
+        $geminiModel=(string)config('services.ai.gemini_model','gemini-3.5-flash-lite');
+        $privacyApproved=(bool)config('services.ai.gemini_allow_sensitive_evidence',false);
+        $this->line('Gemini: model '.$geminiModel.'; sensitive evidence permission '.($privacyApproved?'ON':'OFF'));
+
+        if (!$privacyApproved) {
+            $this->warn('Gemini unpaid-tier policy: real bank/agent proofs remain blocked. This diagnostic sends only synthetic content.');
+        }
+
+        if ($geminiKey==='') {
+            $failed=true;
+            $this->error('Gemini: GEMINI_API_KEY is missing.');
+        } else {
+            try {
+                $parts=[['text'=>'Reply with exactly AGENAUDIT and nothing else.']];
+                $visionAvailable=function_exists('imagecreatetruecolor') && function_exists('imagepng');
+                if ($visionAvailable) {
+                    $img=imagecreatetruecolor(320,128);
+                    $white=imagecolorallocate($img,255,255,255);
+                    $black=imagecolorallocate($img,0,0,0);
+                    imagefilledrectangle($img,0,0,319,127,$white);
+                    imagestring($img,5,60,52,'AGENAUDIT',$black);
+                    ob_start();
+                    imagepng($img);
+                    $png=ob_get_clean();
+                    imagedestroy($img);
+                    $parts[0]['text']='Read the word in this synthetic image. Reply with only that word.';
+                    $parts[]=['inline_data'=>[
+                        'mime_type'=>'image/png',
+                        'data'=>base64_encode($png),
+                    ]];
+                } else {
+                    $this->warn('GD is not installed: the Gemini smoke test only checks text API connectivity.');
+                }
+
+                $base=rtrim((string)config('services.ai.gemini_base_url','https://generativelanguage.googleapis.com/v1beta'),'/');
+                $response=\Illuminate\Support\Facades\Http::acceptJson()
+                    ->withHeaders(['x-goog-api-key'=>$geminiKey])
+                    ->withoutRedirecting()
+                    ->timeout(30)
+                    ->post($base.'/models/'.rawurlencode($geminiModel).':generateContent',[
+                        'contents'=>[['role'=>'user','parts'=>$parts]],
+                        'generationConfig'=>['maxOutputTokens'=>128],
+                    ]);
+
+                if (!$response->successful()) {
+                    $failed=true;
+                    $this->error('Gemini: FAILED HTTP '.$response->status().'. Check API key, model availability, free-tier limits and supported region.');
+                } else {
+                    $text=(string)data_get($response->json(),'candidates.0.content.parts.0.text','');
+                    if (strtoupper(trim($text," \t\n\r\0\x0B.\"'"))==='AGENAUDIT') {
+                        $this->info($visionAvailable
+                            ? 'Gemini: PASS — key, model, and synthetic image understanding.'
+                            : 'Gemini: PASS — key and text API; image understanding not tested.');
+                    } else {
+                        $failed=true;
+                        $this->error('Gemini: HTTP 200 received, but synthetic test output did not match.');
+                    }
+                }
+            } catch (\Throwable $e) {
+                report($e);
+                $failed=true;
+                $this->error('Gemini: FAILED due to network or runtime exception. See Laravel Cloud Logs.');
+            }
+        }
+    } elseif ($aiDriver !== 'openai') {
+        $this->warn('OpenAI and Gemini tests skipped: custom HTTP driver needs its own gateway test.');
     } elseif ($aiKey === '' || $aiModel === '') {
         $this->error('OpenAI: AI_API_KEY or AI_MODEL is missing.');
         $failed = true;
