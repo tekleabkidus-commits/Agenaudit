@@ -23,7 +23,14 @@ class AgentImportService
                 $id=Normalizer::identifier($idRaw); $user=Normalizer::identifier($userRaw); if($id)$ids[]=$id; if($user)$users[]=$user;
                 $prepared[]=['row_number'=>$i+2,'brand_name'=>$brandName,'agent_id'=>$idRaw,'agent_username'=>$userRaw,'id_norm'=>$id,'user_norm'=>$user];
             }
-            $brands=Brand::where('is_active',true)->get()->keyBy(fn(Brand $b)=>Normalizer::name($b->name));
+            $activeBrands=Brand::where('is_active',true)->get();
+            $ambiguousNames=$activeBrands->groupBy(fn(Brand $b)=>Normalizer::name($b->name))
+                ->filter(fn($rows)=>$rows->count()>1)
+                ->keys();
+            if($ambiguousNames->isNotEmpty()) {
+                throw new RuntimeException('Brand names are ambiguous after normalization: '.$ambiguousNames->join(', ').'. Rename duplicate brands before importing.');
+            }
+            $brands=$activeBrands->keyBy(fn(Brand $b)=>Normalizer::name($b->name));
             $existingById=$this->agentsByNormalized('agent_id_normalized',$ids); $existingByUser=$this->agentsByNormalized('username_normalized',$users);
             $seenIds=[]; $seenUsers=[]; $summary=['total'=>0,'valid'=>0,'errors'=>0,'new'=>0,'unchanged'=>0,'move'=>0]; $inserts=[]; $now=now();
             foreach($prepared as $r){
