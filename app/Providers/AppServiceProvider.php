@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\AI\HttpVisionExtractor;
+use App\Services\AI\GeminiVisionExtractor;
 use App\Services\AI\OpenAIVisionExtractor;
 use App\Services\AI\VisionExtractorInterface;
 use Illuminate\Pagination\Paginator;
@@ -18,8 +19,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(VisionExtractorInterface::class, function () {
             return match ((string) config('services.ai.driver', 'http')) {
                 'openai' => app(OpenAIVisionExtractor::class),
+                'gemini' => app(GeminiVisionExtractor::class),
                 'http' => app(HttpVisionExtractor::class),
-                default => throw new \RuntimeException('Unsupported AI_DRIVER. Use openai or http.'),
+                default => throw new \RuntimeException('Unsupported AI_DRIVER. Use openai, gemini, or http.'),
             };
         });
     }
