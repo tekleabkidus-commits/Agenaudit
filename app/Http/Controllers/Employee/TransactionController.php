@@ -158,7 +158,8 @@ class TransactionController extends Controller
             $kind = EvidenceKind::BankPayment;
         } else {
             $data = $request->validate([
-                'screenshot'=>['required','file','mimetypes:image/jpeg,image/png,image/webp','max:'.config('agent_audit.evidence.max_kb',12288)],
+                'screenshots'=>['required','array','min:1','max:'.config('agent_audit.evidence.max_agent_proof_images_per_transaction',5)],
+                'screenshots.*'=>['required','file','mimetypes:image/jpeg,image/png,image/webp','max:'.config('agent_audit.evidence.max_kb',12288)],
             ]);
 
             abort_unless(
@@ -168,7 +169,7 @@ class TransactionController extends Controller
             );
 
             $agent = null;
-            $uploads = [$data['screenshot']];
+            $uploads = $data['screenshots'];
             $kind = EvidenceKind::AgentSystem;
         }
 
@@ -196,8 +197,11 @@ class TransactionController extends Controller
             throw $exception;
         }
 
-        // Queue only after the database has committed, avoiding processing races.
-        foreach ($evidenceIds as $evidenceId) {
+        // Agent proof images describe ONE transaction and must be extracted
+        // together as a single AI request. Each bank receipt remains separate.
+        // Queue only after database commit to avoid processing races.
+        $queueIds = $kind === EvidenceKind::AgentSystem ? [reset($evidenceIds)] : $evidenceIds;
+        foreach ($queueIds as $evidenceId) {
             ProcessEvidenceJob::dispatch($evidenceId);
         }
 
