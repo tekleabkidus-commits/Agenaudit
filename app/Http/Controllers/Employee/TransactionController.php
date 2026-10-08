@@ -2,19 +2,25 @@
 
 namespace App\Http\Controllers\Employee;
 
+use App\Enums\EvidenceKind;
 use App\Enums\RiskLevel;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessEvidenceJob;
 use App\Models\Agent;
 use App\Models\Transaction;
 use App\Services\Transactions\CreditLedgerService;
+use App\Services\Transactions\EvidenceStorageService;
 use App\Services\Transactions\TransactionWorkflowService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Throwable;
 use RuntimeException;
 
 class TransactionController extends Controller
@@ -35,37 +41,147 @@ class TransactionController extends Controller
         return view('employee.transactions.index', compact('transactions'));
     }
 
-    public function create(Request $request, CreditLedgerService $credits): View
+    /**
+     * A transaction type is navigation, not a persisted draft.
+     * Nothing is stored until the first valid screenshot is uploaded.
+     */
+    public function create(Request $request): View|RedirectResponse
     {
-        $user = $request->user()->load('brands');
-        $allowedBrandIds = $user->brands->pluck('id');
-        $outstandingAgents = $credits->agentsWithOutstanding()
-            ->filter(fn ($row) => $allowedBrandIds->contains($row['agent']->brand_id))
-            ->values();
+        $selected = TransactionType::tryFrom((string) $request->query('type',''));
+        if ($selected) {
+            return redirect()->route('employee.transactions.start', ['type'=>$selected->value]);
+        }
 
         return view('employee.transactions.create', [
             'types'=>TransactionType::cases(),
-            'outstandingAgents'=>$outstandingAgents,
-            'assignedBrands'=>$user->brands,
+            'assignedBrands'=>$request->user()->brands()->where('is_active',true)->orderBy('name')->get(),
         ]);
     }
 
-    public function store(Request $request, TransactionWorkflowService $workflow): RedirectResponse
+    public function start(Request $request, TransactionType $type, CreditLedgerService $credits): View
     {
-        $validated = $request->validate([
-            'type'=>['required',Rule::enum(TransactionType::class)],
-            'repayment_agent_id'=>['nullable','integer','exists:agents,id'],
-        ]);
-        $type = TransactionType::from($validated['type']);
-        $agent = null;
+        $user = $request->user();
+        $assignedBrands = $user->brands()->where('is_active',true)->orderBy('name')->get();
+
+        abort_if($assignedBrands->isEmpty(), 403, 'Ask Admin to assign at least one active brand before starting a transaction.');
+
         if ($type === TransactionType::CreditRepayment) {
-            $request->validate(['repayment_agent_id'=>['required','integer','exists:agents,id']]);
-            $agent = Agent::with('brand')->findOrFail($validated['repayment_agent_id']);
-            abort_unless($agent->is_active && $agent->brand?->is_active, 422, 'This agent or brand is inactive.');
-            abort_unless($request->user()->canAccessBrand($agent->brand_id), 403, 'You are not assigned to this agent brand.');
+            $allowedBrandIds = $assignedBrands->pluck('id');
+            $outstandingAgents = $credits->agentsWithOutstanding()
+                ->filter(fn ($row) => $allowedBrandIds->contains($row['agent']->brand_id) && $row['agent']->brand?->is_active)
+                ->values();
+
+            return view('employee.transactions.repayment-select', [
+                'outstandingAgents'=>$outstandingAgents,
+                'assignedBrands'=>$assignedBrands,
+            ]);
         }
-        $transaction = $workflow->create($request->user(), $type, $agent);
-        return redirect()->route('employee.transactions.show',$transaction);
+
+        return view('employee.transactions.initial-evidence', [
+            'type'=>$type,
+            'assignedBrands'=>$assignedBrands,
+            'agent'=>null,
+            'outstanding'=>null,
+        ]);
+    }
+
+    public function repaymentEvidence(Request $request, Agent $agent, CreditLedgerService $credits): View
+    {
+        $agent->load('brand');
+        abort_unless(
+            $agent->is_active && $agent->brand?->is_active && $request->user()->canAccessBrand($agent->brand_id),
+            403,
+            'This agent is not available to you.'
+        );
+
+        $outstanding = $credits->outstanding($agent);
+        abort_unless($outstanding > 0, 422, 'This agent has no outstanding credit to repay.');
+
+        return view('employee.transactions.initial-evidence', [
+            'type'=>TransactionType::CreditRepayment,
+            'assignedBrands'=>$request->user()->brands()->where('is_active',true)->orderBy('name')->get(),
+            'agent'=>$agent,
+            'outstanding'=>$outstanding,
+        ]);
+    }
+
+    /**
+     * Validate and store the first screenshot in the same DB transaction
+     * as the financial record. Invalid/missing evidence never leaves a draft.
+     */
+    public function storeInitialEvidence(
+        Request $request,
+        TransactionType $type,
+        TransactionWorkflowService $workflow,
+        EvidenceStorageService $storage,
+        CreditLedgerService $credits
+    ): RedirectResponse {
+        $user = $request->user();
+
+        if ($type === TransactionType::CreditRepayment) {
+            $data = $request->validate([
+                'repayment_agent_id'=>['required','integer','exists:agents,id'],
+                'screenshots'=>['required','array','min:1','max:'.config('agent_audit.evidence.max_bank_screenshots_per_transaction',12)],
+                'screenshots.*'=>['required','file','mimetypes:image/jpeg,image/png,image/webp','max:'.config('agent_audit.evidence.max_kb',12288)],
+            ]);
+
+            $agent = Agent::with('brand')->findOrFail($data['repayment_agent_id']);
+            abort_unless(
+                $agent->is_active && $agent->brand?->is_active && $user->canAccessBrand($agent->brand_id),
+                403,
+                'This agent is not assigned to you or is inactive.'
+            );
+            abort_unless($credits->outstanding($agent) > 0, 422, 'This agent has no outstanding credit.');
+
+            $uploads = $data['screenshots'];
+            $kind = EvidenceKind::BankPayment;
+        } else {
+            $data = $request->validate([
+                'screenshot'=>['required','file','mimetypes:image/jpeg,image/png,image/webp','max:'.config('agent_audit.evidence.max_kb',12288)],
+            ]);
+
+            abort_unless(
+                $user->brands()->where('is_active',true)->exists(),
+                403,
+                'Ask Admin to assign an active brand.'
+            );
+
+            $agent = null;
+            $uploads = [$data['screenshot']];
+            $kind = EvidenceKind::AgentSystem;
+        }
+
+        $transaction = null;
+        try {
+            [$transaction, $evidenceIds] = DB::transaction(function () use ($workflow, $storage, $user, $type, $agent, $uploads, $kind, &$transaction): array {
+                $transaction = $workflow->create($user, $type, $agent);
+                $evidenceIds = [];
+
+                foreach ($uploads as $file) {
+                    $stored = $storage->store($transaction, $file, $kind);
+                    $evidenceIds[] = $stored->id;
+                }
+
+                // Initial uploads are Processing, not empty Draft records.
+                $transaction->update(['status'=>TransactionStatus::Processing]);
+                return [$transaction, $evidenceIds];
+            });
+        } catch (Throwable $exception) {
+            // Clean up any uploads written to object storage before the DB rolled back.
+            if ($transaction) {
+                Storage::disk(config('agent_audit.evidence.disk', 'private'))
+                    ->deleteDirectory('evidence/'.$transaction->reference);
+            }
+            throw $exception;
+        }
+
+        // Queue only after the database has committed, avoiding processing races.
+        foreach ($evidenceIds as $evidenceId) {
+            ProcessEvidenceJob::dispatch($evidenceId);
+        }
+
+        return redirect()->route('employee.transactions.show', $transaction)
+            ->with('success', 'Evidence saved and queued for verification.');
     }
 
     public function show(Request $request, Transaction $transaction, CreditLedgerService $credits): View
