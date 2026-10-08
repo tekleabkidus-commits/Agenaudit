@@ -89,6 +89,38 @@ class TransactionWorkflowService
 
     private function recalculateBankTransaction(Transaction $transaction): Transaction
     {
+        // Never complete a top-up while a bank screenshot is still in the
+        // extraction/confirmation queue. Otherwise queued jobs can add
+        // new payment records after a transaction has been finalized.
+        $openEvidence = $transaction->evidenceFiles()
+            ->where('kind', 'bank_payment')
+            ->whereNull('superseded_by_id')
+            ->whereIn('status', [
+                'queued',
+                'processing',
+                'pending_employee_confirmation',
+                'pending_admin_extraction',
+                'failed',
+                'needs_reupload',
+            ])
+            ->first();
+
+        if ($openEvidence) {
+            $status = match ($openEvidence->status->value) {
+                'pending_employee_confirmation' => TransactionStatus::PendingEmployeeConfirmation,
+                'pending_admin_extraction' => TransactionStatus::PendingAdminExtraction,
+                'failed', 'needs_reupload' => TransactionStatus::NeedsClearerScreenshot,
+                default => TransactionStatus::Processing,
+            };
+
+            $transaction->update([
+                'status' => $status,
+                'review_reason' => 'At least one bank screenshot is still waiting for processing, confirmation or replacement.',
+            ]);
+
+            return $transaction->fresh();
+        }
+
         $payments = $transaction->payments;
         if ($payments->isEmpty()) {
             $transaction->update(['status'=>TransactionStatus::Processing,'valid_payment_total'=>0,'bank_payment_total'=>0,'difference'=>0]);
