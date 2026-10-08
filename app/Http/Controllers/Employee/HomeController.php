@@ -20,6 +20,10 @@ class HomeController extends Controller
             ->where(function ($query) use ($brandIds) {
                 $query->whereNull('brand_id')->orWhereIn('brand_id',$brandIds);
             })
+            ->where(function ($query) {
+                $query->where('status', '!=', \App\Enums\TransactionStatus::Draft->value)
+                    ->orWhereHas('evidenceFiles');
+            })
             ->latest()
             ->limit(8)
             ->get();
