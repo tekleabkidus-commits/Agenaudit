@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\CommissionController;
 use App\Http\Controllers\Admin\CreditController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EmployeeController;
+use App\Http\Controllers\Admin\HealthController;
 use App\Http\Controllers\Admin\ManualExtractionController;
 use App\Http\Controllers\Admin\ReceivingAccountController;
 use App\Http\Controllers\Admin\ReportController;
@@ -78,6 +79,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/employees', [EmployeeController::class, 'index'])->name('employees.index');
         Route::post('/employees', [EmployeeController::class, 'store'])->name('employees.store');
         Route::put('/employees/{user}', [EmployeeController::class, 'update'])->name('employees.update');
+        Route::get('/health', [HealthController::class, 'index'])->name('health.index');
+        Route::post('/health/storage-test', [HealthController::class, 'testStorage'])->name('health.storage-test');
         Route::get('/settings', [SettingsController::class, 'edit'])->name('settings.edit');
         Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
