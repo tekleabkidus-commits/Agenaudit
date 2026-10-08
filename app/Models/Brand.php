@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Brand extends Model
 {
     use HasFactory;
-    protected $fillable = ['name', 'slug', 'is_active'];
-    protected function casts(): array { return ['is_active' => 'boolean']; }
+    protected $fillable = ['name', 'slug', 'is_active', 'commission_enabled', 'commission_monthly_limit'];
+    protected function casts(): array { return ['is_active' => 'boolean', 'commission_enabled' => 'boolean', 'commission_monthly_limit' => 'integer']; }
     public function agents(): HasMany { return $this->hasMany(Agent::class); }
     public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
     public function receivingAccounts(): BelongsToMany { return $this->belongsToMany(ReceivingAccount::class); }
