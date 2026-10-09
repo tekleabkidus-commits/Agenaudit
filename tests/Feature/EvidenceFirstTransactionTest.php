@@ -291,4 +291,107 @@ class EvidenceFirstTransactionTest extends TestCase
             ->where('status',\App\Enums\EvidenceStatus::Extracted->value)->count());
     }
 
+    public function test_production_fast_path_reads_two_agent_proofs_immediately_without_queue_worker(): void
+    {
+        Storage::fake('private');
+        config()->set('agent_audit.evidence.fast_agent_extraction', true);
+        config()->set('agent_audit.evidence.fast_agent_timeout_seconds', 18);
+        config()->set('services.ai.timeout', 45);
+
+        $brand = $this->brand('InstantTest');
+        $employee = $this->employee($brand);
+        $agent = $this->agent($brand);
+
+        app(SettingsService::class)->set('ai.enabled', true);
+
+        $mock = Mockery::mock(VisionExtractorInterface::class);
+        $mock->shouldReceive('extractMany')->once()
+            ->withArgs(fn ($proofs) => count($proofs) === 2)
+            ->andReturn([
+                'quality'=>['score'=>0.99, 'critical_confidence'=>0.99, 'issues'=>[]],
+                'agent_id'=>$agent->agent_id, 'agent_username'=>$agent->username,
+                'brand_hint'=>$brand->name, 'amount'=>3500,
+                'transaction_at'=>now()->toIso8601String(),
+                'balance_before'=>2000, 'balance_after'=>5500,
+                'transaction_reference'=>'FAST001',
+            ]);
+        $this->app->instance(VisionExtractorInterface::class,$mock);
+
+        $this->actingAs($employee)->post(
+            route('employee.transactions.initial-evidence.store',['type'=>'paid_topup']),
+            ['screenshots'=>[
+                UploadedFile::fake()->image('identity.png'),
+                UploadedFile::fake()->image('balance.png'),
+            ]]
+        )->assertRedirect()->assertSessionHas('success');
+
+        $tx=Transaction::firstOrFail();
+        $this->assertSame($agent->id,$tx->agent_id);
+        $this->assertEquals(3500,$tx->amount);
+        $this->assertSame(2,$tx->evidenceFiles()->where('status','extracted')->count());
+        $this->assertSame(45,(int)config('services.ai.timeout'),'Request-scoped timeout must be restored.');
+        $this->assertDatabaseCount('transactions',1);
+
+        // A delayed job from an old worker must NOT call AI a second time.
+        app(EvidenceProcessor::class)->process($tx->evidenceFiles()->orderBy('id')->firstOrFail());
+        $this->assertDatabaseCount('transactions',1);
+    }
+
+    public function test_fast_path_error_never_leaves_agent_proof_permanently_queued(): void
+    {
+        Storage::fake('private');
+        config()->set('agent_audit.evidence.fast_agent_extraction', true);
+
+        $employee=$this->employee($this->brand('InstantError'));
+        app(SettingsService::class)->set('ai.enabled',true);
+
+        $mock=Mockery::mock(VisionExtractorInterface::class);
+        $mock->shouldReceive('extract')->once()
+            ->andThrow(new \RuntimeException('Simulated Gemini outage; no secret data in output'));
+        $this->app->instance(VisionExtractorInterface::class,$mock);
+
+        $this->actingAs($employee)->post(
+            route('employee.transactions.initial-evidence.store',['type'=>'paid_topup']),
+            ['screenshots'=>[UploadedFile::fake()->image('agent.png')]]
+        )->assertRedirect();
+
+        $this->assertSame(TransactionStatus::PendingAdminReview,Transaction::firstOrFail()->status);
+        $this->assertSame(\App\Enums\EvidenceStatus::Failed,EvidenceFile::firstOrFail()->status);
+    }
+
+    public function test_employee_live_progress_endpoint_is_private_and_reports_state_changes(): void
+    {
+        Storage::fake('private');
+        Queue::fake();
+        $brand=$this->brand('RealtimeStatus');
+        $employee=$this->employee($brand);
+
+        $this->actingAs($employee)->post(
+            route('employee.transactions.initial-evidence.store',['type'=>'paid_topup']),
+            ['screenshots'=>[UploadedFile::fake()->image('agent.png')]]
+        )->assertRedirect();
+
+        $tx=Transaction::firstOrFail();
+        $url=route('employee.transactions.processing-status',$tx);
+
+        $first=$this->actingAs($employee)->getJson($url)->assertOk()
+            ->assertJsonPath('processing',true)
+            ->assertHeader('Cache-Control','private, no-store, max-age=0')
+            ->json('fingerprint');
+
+        $this->actingAs($employee)->get(route('employee.transactions.show',$tx))
+            ->assertOk()->assertSee('LIVE AI READING');
+
+        $tx->evidenceFiles()->firstOrFail()->update(['status'=>\App\Enums\EvidenceStatus::Extracted]);
+        $second=$this->actingAs($employee)->getJson($url)->assertOk()
+            ->assertJsonPath('processing',false)->json('fingerprint');
+        $this->assertNotSame($first,$second);
+
+        $other=User::create([
+            'name'=>'Unassigned', 'username'=>'unassigned_status',
+            'password'=>'validpassword123','role'=>UserRole::Employee,'is_active'=>true,
+        ]);
+        $this->actingAs($other)->getJson($url)->assertForbidden();
+    }
+
 }
