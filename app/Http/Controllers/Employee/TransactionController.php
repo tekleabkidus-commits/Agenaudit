@@ -209,11 +209,12 @@ class TransactionController extends Controller
             ->with('success', 'Evidence saved and queued for verification.');
     }
 
-    public function show(Request $request, Transaction $transaction, CreditLedgerService $credits): View
+    public function show(Request $request, Transaction $transaction, CreditLedgerService $credits, \App\Services\Banking\AgentTopupReferenceService $referenceService): View
     {
         $this->authorize('view',$transaction);
-        $transaction->load(['agent.brand','brand','payments.fromBank','payments.toBank','payments.receivingAccount','evidenceFiles','events.actor','correctionRequests']);
+        $transaction->load(['agent.brand','brand','payments.fromBank','payments.toBank','payments.receivingAccount','payments.evidenceFile','evidenceFiles','events.actor','correctionRequests']);
         $currentOutstanding = $transaction->agent ? $credits->outstanding($transaction->agent) : null;
+        $referenceReconciliation = $referenceService->analyze($transaction);
 
         $commissionUsedThisMonth = null;
         $commissionRemainingThisMonth = null;
@@ -234,7 +235,8 @@ class TransactionController extends Controller
             'transaction',
             'currentOutstanding',
             'commissionUsedThisMonth',
-            'commissionRemainingThisMonth'
+            'commissionRemainingThisMonth',
+            'referenceReconciliation'
         ));
     }
 
