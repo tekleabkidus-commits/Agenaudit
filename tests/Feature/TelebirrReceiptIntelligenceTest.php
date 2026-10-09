@@ -8,9 +8,11 @@ use App\Enums\EvidenceKind;
 use App\Exceptions\ReviewRequiredException;
 use App\Exceptions\ClearerScreenshotRequiredException;
 use Tests\TestCase;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class TelebirrReceiptIntelligenceTest extends TestCase
 {
+    use RefreshDatabase;
     private function green(array $extra=[]): array
     {
         return array_merge([
@@ -102,7 +104,7 @@ class TelebirrReceiptIntelligenceTest extends TestCase
             'from_bank'=>'Zemen Bank',
             'from_bank_label_visible'=>false,
         ]));
-        $this->assertSame('Zemen Bank',$result['from_bank']);
+        $this->assertNull($result['from_bank']);
         $this->assertSame('unconfirmed',$result['_receipt_intelligence']['family']);
     }
 
