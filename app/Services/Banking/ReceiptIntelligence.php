@@ -55,6 +55,14 @@ class ReceiptIntelligence
             'telebirr', 'tele birr', 'ethiotelecom telebirr', 'ethio telecom telebirr',
         ], true);
 
+        // An AI-inferred conflicting bank name is not a visible issuer.
+        // Force review instead of allowing an advertisement or screenshot
+        // design to determine the institution.
+        if (!$explicitSource && $hasOtherIssuer) {
+            $payload['from_bank'] = null;
+            $templateMatch = false;
+        }
+
         $sourceMethod = 'unconfirmed';
         if ($explicitSource && $from !== '') {
             $sourceMethod = 'visible_issuer';
