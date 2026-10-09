@@ -1,7 +1,7 @@
 <?php
 namespace App\Http\Controllers\Admin;
 
-use App\Enums\EvidenceKind; use App\Enums\TransactionStatus; use App\Enums\TransactionType; use App\Http\Controllers\Controller; use App\Models\Brand; use App\Models\Transaction; use App\Models\User; use App\Services\Banking\PaymentVerificationService; use App\Services\Transactions\CreditLedgerService; use App\Services\Transactions\EvidenceProcessor; use App\Services\Transactions\TransactionWorkflowService; use Illuminate\Http\RedirectResponse; use Illuminate\Http\Request; use Illuminate\View\View; use Throwable;
+use App\Enums\EvidenceKind; use App\Enums\TransactionStatus; use App\Enums\TransactionType; use App\Http\Controllers\Controller; use App\Jobs\RecheckExternalPaymentsJob; use App\Models\Brand; use App\Models\Transaction; use App\Models\User; use App\Services\Banking\PaymentVerificationService; use App\Services\Transactions\CreditLedgerService; use App\Services\Transactions\EvidenceProcessor; use App\Services\Transactions\TransactionWorkflowService; use Illuminate\Http\RedirectResponse; use Illuminate\Http\Request; use Illuminate\View\View; use Throwable;
 
 class TransactionController extends Controller
 {
@@ -45,7 +45,8 @@ class TransactionController extends Controller
     public function retryExternal(Request $request, Transaction $transaction, PaymentVerificationService $payments, TransactionWorkflowService $workflow): RedirectResponse
     {
         abort_if(in_array($transaction->status,[TransactionStatus::Completed,TransactionStatus::Rejected,TransactionStatus::Cancelled],true),422);
-        try{foreach($transaction->payments()->get() as $p)if($p->internal_status->value==='valid')$payments->retryExternal($p);$workflow->recalculate($transaction->fresh());}catch(Throwable $e){return back()->withErrors(['external'=>$e->getMessage()]);}
-        return back()->with('success','Secondary verification retried. Internal hard rules remain authoritative.');
+        abort_unless($transaction->type->requiresBankEvidence(),422);
+        RecheckExternalPaymentsJob::dispatch($transaction->id, null, $request->user()->id);
+        return back()->with('success','Check.et recheck queued for eligible receipts, including those waiting after an earlier outage. Refresh this page for results.');
     }
 }
