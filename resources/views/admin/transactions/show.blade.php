@@ -93,7 +93,21 @@
             </div>
 
             <div class="detail-grid compact-details">
-                <div><span>Amount</span><b>{{ number_format((float)$payment->amount,2) }} ETB</b></div>
+                <div><span>Reconciled transfer amount</span><b>{{ number_format((float)$payment->amount,2) }} ETB</b><small>Counted only when internally valid</small></div>
+                <div><span>Check.et reported amount</span><b>{{ is_numeric(data_get($payment->external_response,'data.receipt.amount')) ? number_format((float)data_get($payment->external_response,'data.receipt.amount'),2).' ETB' : 'Not supplied' }}</b>
+                    <small>Reported by provider; not necessarily fee-exclusive</small></div>
+                <div><span>Check.et amount meaning</span>
+                    <b>{{ str($payment->fromBank?->check_et_amount_meaning ?? 'unknown')->replace('_',' ')->title() }}</b>
+                    <small>Configured separately for each transaction issuer</small></div>
+                @if(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.total_debited') !== null)
+                    <div><span>Screenshot payer debit</span>
+                        <b>{{ number_format((float)data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.total_debited'),2) }} ETB</b></div>
+                @endif
+                @if(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.total_fees') !== null)
+                    <div><span>Visible fees / taxes</span>
+                        <b>{{ number_format((float)data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.total_fees'),2) }} ETB</b>
+                        <small>{{ data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.fees_known_complete') ? 'Complete receipt fee breakdown' : 'May omit additional charges' }}</small></div>
+                @endif
                 @if(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.family'))
                     <div><span>Receipt identity</span><b>{{ str(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.family'))->replace('_',' ')->title() }}</b>
                         <small>Based on screenshot patterns; not proof of payment settlement</small></div>
