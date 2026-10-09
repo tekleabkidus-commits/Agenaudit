@@ -468,3 +468,131 @@ Artisan::command('agent-audit:test-apis', function (\App\Services\SettingsServic
 
     return $failed ? self::FAILURE : self::SUCCESS;
 })->purpose('Safely test configured OpenAI and Check.et API connections without exposing credentials or verifying payments');
+
+
+/**
+ * Compare one real, authorized receipt with a Check.et provider response.
+ *
+ * Reads Laravel Cloud's existing CHECK_ET_API_KEY. It does not store PII,
+ * create payments, update transactions, or disclose provider response bodies.
+ * It WILL submit the reference to Check.et and may use API quota.
+ *
+ * Only a successful official response for the *same transaction* supports
+ * an observation about the amount meaning of that one transaction.
+ */
+Artisan::command('agent-audit:compare-check-et
+    {--bank=telebirr : Check.et bank code that issued the transaction reference}
+    {--reference= : The exact reference from the official receipt}
+    {--settled= : The transferred/settled amount visible on the official invoice}
+    {--paid= : The sender total paid/debited amount including fees, if available}',
+    function () {
+        $key=(string)config('services.check_et.api_key','');
+        $base=rtrim((string)config('services.check_et.base_url','https://api.check.et'),'/');
+        $bank=strtolower(trim((string)$this->option('bank')));
+        $reference=strtoupper(trim((string)$this->option('reference')));
+        $settled=$this->option('settled');
+        $paid=$this->option('paid');
+
+        if ($key==='') {
+            $this->error('Check.et API key is not configured in this Laravel Cloud environment.');
+            return self::FAILURE;
+        }
+        if (!preg_match('/^[a-z0-9_]{2,40}$/',$bank)
+            || !preg_match('/^[A-Z0-9._-]{5,100}$/',$reference)) {
+            $this->error('Bank or transaction reference is missing or contains unsupported characters.');
+            return self::FAILURE;
+        }
+        if ($settled===null || !is_numeric($settled) || (float)$settled <=0
+            || ($paid!==null && (!is_numeric($paid) || (float)$paid<=0))) {
+            $this->error('Supply --settled with a positive amount, and optional positive --paid.');
+            return self::FAILURE;
+        }
+
+        // Only print a masked reference and whitelisted financial fields.
+        $this->info('Checking '.strtoupper($bank).' receipt ending ...'.substr($reference,-4));
+        $this->warn('This sends a real transaction reference to Check.et and may consume verification quota.');
+
+        try {
+            $response=\Illuminate\Support\Facades\Http::acceptJson()
+                ->withToken($key)
+                ->withoutRedirecting()
+                ->timeout(25)
+                ->post($base.'/api/v1/verify',[
+                    'bank'=>$bank,
+                    'transaction_number'=>$reference,
+                ]);
+        } catch (\Throwable $error) {
+            report($error);
+            $this->error('Check.et connection failed; details are available in Laravel Cloud logs.');
+            return self::FAILURE;
+        }
+
+        if (!$response->successful()) {
+            $this->error('Check.et returned HTTP '.$response->status().'. Verification not completed.');
+            return self::FAILURE;
+        }
+
+        $body=$response->json();
+        if (!is_array($body)) {
+            $this->error('Check.et returned an invalid JSON payload.');
+            return self::FAILURE;
+        }
+
+        $success=data_get($body,'success') === true;
+        $exists=data_get($body,'exists') === true;
+        $method=strtolower(trim((string)data_get($body,'data.verification_method','unspecified')));
+        $status=strtolower(trim((string)data_get($body,'data.receipt.status','unspecified')));
+        $amount=data_get($body,'data.receipt.amount');
+        $currency=strtoupper(trim((string)data_get($body,'data.receipt.currency','ETB')));
+        $duplicate=data_get($body,'duplicate');
+
+        $this->line('API success: '.($success?'yes':'no'));
+        $this->line('Transaction exists: '.($exists?'yes':'no'));
+        $this->line('Verification method: '.$method);
+        $this->line('Receipt status: '.$status);
+        $this->line('Duplicate indicator: '.($duplicate===true?'yes':($duplicate===false?'no':'not provided')));
+        $this->line('Currency: '.$currency);
+        $this->line('Invoice settled: '.number_format((float)$settled,2).' ETB');
+        if ($paid!==null) $this->line('Invoice payer total: '.number_format((float)$paid,2).' ETB');
+
+        if (!is_numeric($amount) || !is_finite((float)$amount) || (float)$amount<=0) {
+            $this->warn('Check.et receipt.amount: unavailable or nonnumeric.');
+            $this->warn('RESULT: INCONCLUSIVE — the provider returned no usable amount.');
+            return self::FAILURE;
+        }
+
+        $actual=round((float)$amount,2);
+        $this->line('Check.et receipt.amount: '.number_format($actual,2).' '.$currency);
+
+        // Do not dump full response: it can contain payer names and accounts.
+        foreach (['service_fee','fee','vat','fee_vat','total_paid','total_debited','settled_amount','transfer_amount'] as $field) {
+            $value=data_get($body,'data.receipt.'.$field);
+            if (is_numeric($value)) {
+                $this->line('Check.et receipt.'.$field.': '.number_format((float)$value,2).' '.$currency);
+            }
+        }
+
+        if (!$success || !$exists || $method!=='official' || $currency!=='ETB'
+            || !in_array($status,['completed','complete','successful','success','settled','paid'],true)) {
+            $this->warn('RESULT: INCONCLUSIVE — a confirmed, official, completed ETB receipt was not established.');
+            return self::FAILURE;
+        }
+
+        $settledCents=(int)round((float)$settled*100);
+        $paidCents=$paid===null?null:(int)round((float)$paid*100);
+        $actualCents=(int)round($actual*100);
+
+        if ($paidCents!==null && $paidCents!==$settledCents && $actualCents===$settledCents) {
+            $this->info('RESULT: PROVIDER RETURNS SETTLED/TRANSFER AMOUNT for THIS receipt, not the fee-inclusive payer total.');
+        } elseif ($paidCents!==null && $paidCents!==$settledCents && $actualCents===$paidCents) {
+            $this->warn('RESULT: PROVIDER RETURNS PAYER TOTAL for THIS receipt (including fees shown on the invoice).');
+        } elseif ($actualCents===$settledCents) {
+            $this->info('RESULT: PROVIDER AMOUNT MATCHES SETTLED AMOUNT, but fee distinction is not proven by this sample.');
+        } else {
+            $this->warn('RESULT: PROVIDER AMOUNT MATCHES NEITHER EXPECTED AMOUNT. Inspect the original invoice and bank channel.');
+        }
+        $this->warn('This is one receipt only. Do not change bank-wide amount semantics until several transfer channels are tested.');
+
+        return self::SUCCESS;
+    })
+    ->purpose('Compare a real invoice transfer amount, payer fees, and Check.et API response using the cloud-held key');
