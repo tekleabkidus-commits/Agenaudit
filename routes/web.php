@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\TransactionController as AdminTransactionControll
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Employee\CorrectionController;
+use App\Http\Controllers\Employee\CheckEtRecheckController;
 use App\Http\Controllers\Employee\EvidenceController;
 use App\Http\Controllers\Employee\HomeController;
 use App\Http\Controllers\Employee\TransactionController;
@@ -103,6 +104,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/transactions/{transaction}', [TransactionController::class, 'show'])->name('transactions.show');
         Route::post('/transactions/{transaction}/agent-evidence', [EvidenceController::class, 'agent'])->middleware('throttle:uploads')->name('transactions.agent-evidence');
         Route::post('/transactions/{transaction}/bank-evidence', [EvidenceController::class, 'banks'])->middleware('throttle:uploads')->name('transactions.bank-evidence');
+        Route::post('/transactions/{transaction}/recheck-check-et', [CheckEtRecheckController::class, 'all'])
+            ->middleware('throttle:3,1')->name('transactions.recheck-check-et');
+        Route::post('/transactions/{transaction}/payments/{payment}/recheck-check-et', [CheckEtRecheckController::class, 'one'])
+            ->middleware('throttle:3,1')->name('transactions.payments.recheck-check-et');
         Route::post('/evidence/{evidence}/confirm', [EvidenceController::class, 'confirm'])->name('evidence.confirm');
         Route::post('/evidence/{evidence}/clearer', [EvidenceController::class, 'clearer'])->name('evidence.clearer');
         Route::post('/evidence/{evidence}/retry', [EvidenceController::class, 'retry'])->name('evidence.retry');
