@@ -1,8 +1,10 @@
-name: Production URL smoke check
+name: Production release verification
 
 on:
   push:
+    branches: [main]
     paths:
+      - 'public/agenaudit-release.txt'
       - '.github/workflows/live-smoke.yml'
   workflow_dispatch:
 
@@ -10,22 +12,30 @@ permissions:
   contents: read
 
 jobs:
-  health:
+  release:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
-      - name: Check Laravel Cloud health endpoint
+      - name: Wait for latest release marker on Laravel Cloud
         run: |
-          url="https://agenaudit-production-mfxsno.laravel.cloud/up"
-          for attempt in 1 2 3 4 5; do
-            status=$(curl -L --silent --show-error --max-time 25 --output /tmp/agent-audit-health.html --write-out '%{http_code}' "$url") || status="000"
-            echo "Health attempt $attempt: HTTP $status"
-            if [ "$status" = "200" ]; then exit 0; fi
+          url="https://agenaudit-production-mfxsno.laravel.cloud/agenaudit-release.txt"
+          expected="agenaudit-2026-10-09-reference-recheck-dd66dfaa"
+          for attempt in $(seq 1 24); do
+            actual=$(curl -fLsS --max-time 20 "$url" 2>/dev/null || true)
+            if [ "$actual" = "$expected" ]; then
+              echo "Correct production release marker found (attempt $attempt)."
+              exit 0
+            fi
+            echo "Production does not yet report the requested release (attempt $attempt/24)."
             sleep 15
           done
-          echo "Production Laravel health check was not successful."
+          echo "The requested GitHub release could not be confirmed on Laravel Cloud."
           exit 1
-      - name: Check production login page without credentials
+      - name: Check production health and login
         run: |
-          status=$(curl -L --silent --show-error --max-time 25 --output /tmp/agent-audit-login.html --write-out '%{http_code}' https://agenaudit-production-mfxsno.laravel.cloud/login)
-          echo "Login page: HTTP $status"
-          test "$status" = "200"
+          for route in up login; do
+            url="https://agenaudit-production-mfxsno.laravel.cloud/$route"
+            status=$(curl -LsS --max-time 25 --output /dev/null --write-out '%{http_code}' "$url") || status="000"
+            echo "Production /$route returned HTTP $status"
+            test "$status" = "200"
+          done
