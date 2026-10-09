@@ -60,6 +60,9 @@
             $unresolvedRows = $paymentRows->filter(fn($p) => $p->internal_status === App\Enums\PaymentValidationStatus::Review);
             $unverifiedRows = $confirmedRows->filter(fn($p) => $p->external_status !== App\Enums\ExternalVerificationStatus::Passed);
             $confirmedSum = (float) $confirmedRows->sum('amount');
+            $checkEtConfirmedSum = (float) $confirmedRows->filter(fn($p) =>
+                $p->external_status === App\Enums\ExternalVerificationStatus::Passed
+            )->sum('amount');
             $targetTopup = $transaction->type === App\Enums\TransactionType::CreditRepayment ? null : (float) $transaction->amount;
             $eligibleRows = $paymentRows->filter(fn($p) =>
                 $p->internal_status === App\Enums\PaymentValidationStatus::Valid
@@ -75,6 +78,7 @@
             <div class="validation-list">
                 <div><span>Agent-system top-up target</span><b>{{ $targetTopup !== null ? number_format($targetTopup,2).' ETB' : 'Outstanding credit repayment' }}</b></div>
                 <div><span>Amounts supported by readable receipt evidence</span><b>{{ number_format($confirmedSum,2) }} ETB</b></div>
+                <div><span>Check.et-confirmed receipt amounts</span><b>{{ number_format($checkEtConfirmedSum,2) }} ETB</b></div>
                 @if($targetTopup !== null)
                     <div><span>Difference from target (not a bank verification)</span><b>{{ number_format($confirmedSum - $targetTopup,2) }} ETB</b></div>
                 @endif
