@@ -394,4 +394,46 @@ class EvidenceFirstTransactionTest extends TestCase
         $this->actingAs($other)->getJson($url)->assertForbidden();
     }
 
+    public function test_queued_agent_proof_can_be_read_now_without_a_queue_worker(): void
+    {
+        Storage::fake('private');
+        config()->set('agent_audit.evidence.fast_agent_extraction', true);
+        $brand=$this->brand('InstantRecovery');
+        $employee=$this->employee($brand);
+        $agent=$this->agent($brand);
+        app(SettingsService::class)->set('ai.enabled', true);
+
+        $tx=Transaction::create([
+            'reference'=>(string)Str::uuid(),'employee_id'=>$employee->id,
+            'type'=>TransactionType::Credit,'status'=>TransactionStatus::Processing,
+        ]);
+        $storage=app(EvidenceStorageService::class);
+        $first=$storage->store($tx,UploadedFile::fake()->image('stuck-id.png'),EvidenceKind::AgentSystem);
+        $storage->store($tx,UploadedFile::fake()->image('stuck-confirm.png'),EvidenceKind::AgentSystem);
+
+        $mock=Mockery::mock(VisionExtractorInterface::class);
+        $mock->shouldReceive('extractMany')->once()
+            ->withArgs(fn ($files)=>count($files)===2)
+            ->andReturn([
+                'quality'=>['score'=>.99,'critical_confidence'=>.99,'issues'=>[]],
+                'agent_id'=>$agent->agent_id,'agent_username'=>$agent->username,
+                'brand_hint'=>$brand->name,'amount'=>250,
+                'transaction_at'=>now()->toIso8601String(),
+                'balance_before'=>500,'balance_after'=>750,
+                'transaction_reference'=>'RECOVERED001',
+            ]);
+        $this->app->instance(VisionExtractorInterface::class,$mock);
+
+        $this->actingAs($employee)->get(route('employee.transactions.show',$tx))
+            ->assertOk()->assertSee('Read screenshots now');
+
+        $this->actingAs($employee)->post(route('employee.evidence.retry',$first))
+            ->assertRedirect()->assertSessionHas('success');
+
+        $tx->refresh();
+        $this->assertSame($agent->id,$tx->agent_id);
+        $this->assertEquals(250,$tx->amount);
+        $this->assertSame(2,$tx->evidenceFiles()->where('status','extracted')->count());
+    }
+
 }
