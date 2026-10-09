@@ -12,7 +12,7 @@ class TransactionController extends Controller
         if($request->filled('q')){$term='%'.$request->string('q')->toString().'%';$q->where(function($x)use($term){$x->where('reference','like',$term)->orWhereHas('agent',fn($a)=>$a->where('agent_id','like',$term)->orWhere('username','like',$term))->orWhereHas('payments',fn($p)=>$p->where('transaction_id_raw','like',$term)->orWhere('normalized_transaction_id','like',$term));});}
         return view('admin.transactions.index',['transactions'=>$q->paginate(35)->withQueryString(),'brands'=>Brand::orderBy('name')->get(),'employees'=>User::where('role','employee')->orderBy('name')->get(),'types'=>TransactionType::cases(),'statuses'=>TransactionStatus::cases()]);
     }
-    public function show(Transaction $transaction, CreditLedgerService $credits): View
+    public function show(Transaction $transaction, CreditLedgerService $credits, \App\Services\Banking\AgentTopupReferenceService $referenceService): View
     {
         $transaction->load([
             'agent.brand','brand','employee',
@@ -21,7 +21,7 @@ class TransactionController extends Controller
             'correctionRequests.requester','correctionRequests.reviewer',
             'confirmations','issuedCreditRecord.repaymentAllocations.repaymentTransaction'
         ]);
-        return view('admin.transactions.show',['transaction'=>$transaction,'currentOutstanding'=>$transaction->agent?$credits->outstanding($transaction->agent):null]);
+        return view('admin.transactions.show',['transaction'=>$transaction,'currentOutstanding'=>$transaction->agent?$credits->outstanding($transaction->agent):null,'referenceReconciliation'=>$referenceService->analyze($transaction)]);
     }
     public function externalOverride(Request $request, Transaction $transaction, TransactionWorkflowService $workflow): RedirectResponse
     {
