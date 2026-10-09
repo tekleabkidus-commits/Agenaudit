@@ -31,7 +31,15 @@ class ExtractionGuard
 
         $required = $kind === EvidenceKind::AgentSystem
             ? ['agent_id','agent_username','amount','transaction_at']
-            : ['from_bank','to_bank','receiver_account','receiver_name','amount','transaction_id','transaction_at'];
+            : ['to_bank','receiver_account','receiver_name','amount','transaction_id','transaction_at'];
+
+        if ($kind === EvidenceKind::BankPayment && blank(data_get($payload,'from_bank'))) {
+            throw new ClearerScreenshotRequiredException('missing_from_bank', 'Sender institution cannot be identified. Upload the official invoice or another screenshot that confirms the issuer.');
+        }
+
+        if ($kind === EvidenceKind::BankPayment && data_get($payload,'_receipt_intelligence.amount_needs_review',false)) {
+            throw new \App\Exceptions\ReviewRequiredException('transfer_amount_uncertain', 'The screenshot does not establish whether the displayed amount includes transfer fees. Admin review or official invoice is required.');
+        }
 
         foreach ($required as $field) {
             $value = data_get($payload, $field);
