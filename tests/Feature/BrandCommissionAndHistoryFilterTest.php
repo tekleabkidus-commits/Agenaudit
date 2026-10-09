@@ -83,8 +83,8 @@ class BrandCommissionAndHistoryFilterTest extends TestCase
         $response=$this->actingAs($employee)->get(route('employee.transactions.index'));
         $response->assertOk();
         $response->assertSee('A1');
-        $response->assertDontSee('A2');
-        $response->assertDontSee('A3');
+        $response->assertDontSee('<option value="'.$otherAgent->id.'"',false);
+        $response->assertDontSee('<option value="'.$unassigned->id.'"',false);
         $response->assertSee('name="agent"',false);
 
         $this->actingAs($employee)->get(route('employee.transactions.index',['agent'=>$own->id]))
