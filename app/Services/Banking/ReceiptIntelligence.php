@@ -103,6 +103,7 @@ class ReceiptIntelligence
         $componentSum = $components === [] ? null : round(array_sum($components), 2);
         // A stated total fee includes its components. Never add it to them.
         $totalFees = $statedTotalFees ?? $componentSum;
+        $feesKnownComplete = $statedTotalFees !== null || (($payload['fee_components_complete'] ?? false) === true && $componentSum !== null);
         $amountSource = 'legacy_screenshot_amount';
         $amountNeedsReview = false;
 
@@ -123,7 +124,7 @@ class ReceiptIntelligence
             // Only subtract fees actually shown on this particular receipt.
             // Absent fee information means UNKNOWN, never zero.
             $actualDebit = $debited ?? $raw;
-            if ($actualDebit !== null && $totalFees !== null && $actualDebit > $totalFees
+            if ($actualDebit !== null && $totalFees !== null && $feesKnownComplete && $actualDebit > $totalFees
                 && ($raw === null || $debited === null || abs($raw - $debited) <= 0.009)) {
                 $payload['amount'] = round($actualDebit - $totalFees, 2);
                 $amountSource = 'debit_minus_explicit_fees';
@@ -164,6 +165,7 @@ class ReceiptIntelligence
             'fee_vat' => $vat,
             'other_fees' => $otherFees,
             'total_fees' => $totalFees,
+            'fees_known_complete' => $feesKnownComplete,
         ];
 
         return $payload;
