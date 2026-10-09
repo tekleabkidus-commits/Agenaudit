@@ -75,6 +75,34 @@
     @endif
 </div>
 
+@if($transaction->type->requiresBankEvidence() && $referenceReconciliation['target_cents'] !== null)
+<section class="card" style="margin-top:16px">
+    <div class="card-title-row">
+        <div><span class="eyebrow">AGENT-CREDIT REFERENCE</span><h3>Cross-receipt reconciliation</h3></div>
+        <span class="status-pill warning">Reference is not bank verification</span>
+    </div>
+    <div class="detail-grid">
+        <div><span>Credited in agent system</span><b>{{ number_format($referenceReconciliation['target_cents']/100,2) }} ETB</b></div>
+        <div><span>Readable receipt principal total</span><b>{{ number_format($referenceReconciliation['readable_principal_cents']/100,2) }} ETB</b></div>
+        <div><span>Check.et confirmed total</span><b>{{ number_format($referenceReconciliation['check_et_confirmed_cents']/100,2) }} ETB</b></div>
+        <div><span>Remaining amount to explain</span><b>{{ number_format($referenceReconciliation['remainder_cents']/100,2) }} ETB</b></div>
+        <div><span>Receipts with uncertain principal</span><b>{{ $referenceReconciliation['uncertain_count'] }}</b></div>
+        <div><span>Other excluded receipt(s)</span><b>{{ $referenceReconciliation['excluded_count'] }}</b></div>
+    </div>
+    @if($referenceReconciliation['candidate'])
+        @php $candidate=$referenceReconciliation['candidate']; @endphp
+        <div class="alert warning" style="margin-top:12px">
+            <b>Unverified reference hypothesis for receipt {{ $candidate['payment_id'] }}:</b>
+            {{ number_format($candidate['candidate_principal_cents']/100,2) }} ETB possible principal from {{ number_format($candidate['payer_debit_cents']/100,2) }} ETB debit;
+            {{ number_format($candidate['implied_charges_cents']/100,2) }} ETB implied charges.
+            This does not establish real fees, settlement or account ownership. Do not credit it without independently checking the payment.
+        </div>
+    @else
+        <div class="small muted" style="margin-top:10px">{{ $referenceReconciliation['explanation'] }}</div>
+    @endif
+</section>
+@endif
+
 <section class="card" style="margin-top:16px">
     <div class="card-title-row">
         <div><span class="eyebrow">PAYMENT EVIDENCE</span><h3>Bank Payments</h3></div>
