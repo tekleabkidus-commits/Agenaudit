@@ -37,10 +37,9 @@ class ExtractionGuard
             throw new ClearerScreenshotRequiredException('missing_from_bank', 'Sender institution cannot be identified. Upload the official invoice or another screenshot that confirms the issuer.');
         }
 
-        if ($kind === EvidenceKind::BankPayment && data_get($payload,'_receipt_intelligence.amount_needs_review',false)) {
-            throw new \App\Exceptions\ReviewRequiredException('transfer_amount_uncertain', 'The screenshot does not establish whether the displayed amount includes transfer fees. Admin review or official invoice is required.');
-        }
-
+        // A screenshot with an ambiguous total debit is allowed to reach the
+        // verifier. It must NEVER be counted as valid until Check.et returns
+        // a usable independently verified transfer amount.
         foreach ($required as $field) {
             $value = data_get($payload, $field);
             if ($value === null || $value === '') {
