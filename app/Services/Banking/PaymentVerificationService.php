@@ -147,22 +147,54 @@ class PaymentVerificationService
             throw new ClearerScreenshotRequiredException('receiving_account_unverifiable', $match->reason ?? 'Receiving account cannot be uniquely verified.');
         }
 
-        $payment->update(['internal_status'=>PaymentValidationStatus::Valid]);
+        $amountUncertain = (bool) data_get($extracted, '_receipt_intelligence.amount_needs_review', false);
+        // When screenshot shows only a fee-inclusive debit, first ask the
+        // issuer's official API. Do not count the screenshot debit as received.
+        $payment->update([
+            'internal_status' => $amountUncertain ? PaymentValidationStatus::Review : PaymentValidationStatus::Valid,
+        ]);
 
-        $external = $this->checkEt->verify($payment->fresh(['toBank','receivingAccount']));
+        $external = $this->checkEt->verify(
+            $payment->fresh(['fromBank','toBank','receivingAccount']),
+            $amountUncertain
+        );
         $externalStatus = match ($external->status) {
             'passed' => ExternalVerificationStatus::Passed,
             'failed' => ExternalVerificationStatus::Failed,
-            'unavailable' => ExternalVerificationStatus::Unavailable,
+            'unavailable', 'ambiguous' => ExternalVerificationStatus::Unavailable,
             default => ExternalVerificationStatus::Disabled,
         };
-        $payment->update([
+
+        $updates = [
             'external_status'=>$externalStatus,
             'external_response'=>$external->payload ?: null,
             'external_request_keys'=>$external->requestKeys ?: null,
             'external_checked_at'=>in_array($externalStatus, [ExternalVerificationStatus::Passed,ExternalVerificationStatus::Failed,ExternalVerificationStatus::Unavailable], true) ? now() : null,
-        ]);
+        ];
 
+        if ($amountUncertain) {
+            $officialAmount = data_get($external->payload, 'data.receipt.amount');
+            // The client returns "passed" in this mode only for an official
+            // verified receipt AND a bank calibrated to return transfer
+            // principal (not a fee-inclusive payer debit).
+            if ($external->status === 'passed' && is_numeric($officialAmount)
+                && is_finite((float)$officialAmount) && (float)$officialAmount > 0) {
+                $updates['amount'] = round((float)$officialAmount, 2);
+                $updates['internal_status'] = PaymentValidationStatus::Valid;
+                $updates['rejection_code'] = null;
+                $updates['rejection_reason'] = null;
+            } else {
+                $updates['internal_status'] = PaymentValidationStatus::Review;
+                $updates['rejection_code'] = 'transfer_amount_unconfirmed';
+                $updates['rejection_reason'] = 'Screenshot may show total payer debit including fees. The provider has not confirmed that its response amount excludes fees, or bank verification was unavailable. Admin must compare an official receipt before approval.';
+            }
+        } elseif ($external->status === 'ambiguous') {
+            $updates['internal_status'] = PaymentValidationStatus::Review;
+            $updates['rejection_code'] = 'verification_amount_semantics_unknown';
+            $updates['rejection_reason'] = 'Check.et amount differs from the visible transfer amount, but the provider fee treatment is not confirmed. Admin review required.';
+        }
+
+        $payment->update($updates);
         return $payment->fresh();
     }
 
