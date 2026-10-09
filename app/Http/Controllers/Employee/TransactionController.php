@@ -135,7 +135,8 @@ class TransactionController extends Controller
         TransactionType $type,
         TransactionWorkflowService $workflow,
         EvidenceStorageService $storage,
-        CreditLedgerService $credits
+        CreditLedgerService $credits,
+        \App\Services\Transactions\FastEvidenceDispatcher $fastEvidence
     ): RedirectResponse {
         $user = $request->user();
 
@@ -202,11 +203,17 @@ class TransactionController extends Controller
         // Queue only after database commit to avoid processing races.
         $queueIds = $kind === EvidenceKind::AgentSystem ? [reset($evidenceIds)] : $evidenceIds;
         foreach ($queueIds as $evidenceId) {
-            ProcessEvidenceJob::dispatch($evidenceId);
+            if ($kind === EvidenceKind::AgentSystem) {
+                $fastEvidence->agent($evidenceId);
+            } else {
+                ProcessEvidenceJob::dispatch($evidenceId);
+            }
         }
 
         return redirect()->route('employee.transactions.show', $transaction)
-            ->with('success', 'Evidence saved and queued for verification.');
+            ->with('success', $kind === EvidenceKind::AgentSystem && config('agent_audit.evidence.fast_agent_extraction')
+                ? 'Agent proof was read immediately. Review the extracted values below.'
+                : 'Evidence saved and queued for verification.');
     }
 
     public function show(Request $request, Transaction $transaction, CreditLedgerService $credits, \App\Services\Banking\AgentTopupReferenceService $referenceService): View
