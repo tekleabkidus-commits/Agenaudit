@@ -104,13 +104,36 @@ class CheckEtClient
             return new CheckEtResult('failed', $json, array_keys($payload), 'Official receipt is not in a completed state.');
         }
 
-        if (!$allowScreenshotAmountDifference && $officialAmount !== null && abs((float)$officialAmount - (float)$payment->amount) > 0.009) {
-            return new CheckEtResult('failed', $json, array_keys($payload), 'Verified bank amount does not match the screenshot amount.');
+        $issuerMeaning = (string) ($this->verificationIssuer($payment)?->check_et_amount_meaning ?? 'unknown');
+
+        if (!$allowScreenshotAmountDifference && $officialAmount !== null
+            && abs((float)$officialAmount - (float)$payment->amount) > 0.009) {
+            // API amount could include the payer fee; absence of a settled
+            // amount guarantee is NOT evidence that the screenshot is fake.
+            if ($issuerMeaning !== 'transfer_amount') {
+                return new CheckEtResult('ambiguous', $json, array_keys($payload),
+                    'Check.et amount differs from screenshot but its fee semantics are unverified.');
+            }
+            return new CheckEtResult('failed', $json, array_keys($payload),
+                'Confirmed transfer amount differs from screenshot transferred amount.');
         }
 
         $officialReceiver = data_get($json, 'data.receipt.receiver_name');
         if ($officialReceiver && $payment->receiver_name && Normalizer::nameSimilarity($officialReceiver, $payment->receiver_name) < 0.80) {
             return new CheckEtResult('failed', $json, array_keys($payload), 'Verified receiver name differs from screenshot receiver.');
+        }
+
+        if ($allowScreenshotAmountDifference) {
+            $method = strtolower(trim((string)data_get($json,'data.verification_method','')));
+            if ($method !== 'official' || $officialAmount === null) {
+                return new CheckEtResult('ambiguous', $json, array_keys($payload),
+                    'Authoritative official transfer amount is not available from Check.et.');
+            }
+
+            if ($issuerMeaning !== 'transfer_amount') {
+                return new CheckEtResult('ambiguous', $json, array_keys($payload),
+                    'Check.et amount meaning is not confirmed as fee-exclusive transfer principal for this provider.');
+            }
         }
 
         return new CheckEtResult('passed', $json, array_keys($payload));
