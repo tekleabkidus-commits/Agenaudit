@@ -15,16 +15,17 @@ class CheckEtClient
 
     public function enabledFor(PaymentRecord $payment): bool
     {
+        $issuer = $this->verificationIssuer($payment);
         return $this->settings->bool('check_et.enabled', (bool) config('services.check_et.enabled'))
             && filled(config('services.check_et.api_key'))
-            && $payment->toBank?->check_et_enabled
-            && filled($payment->toBank?->check_et_code);
+            && $issuer?->check_et_enabled
+            && filled($issuer?->check_et_code);
     }
 
     /** @return array<string,mixed> */
     public function buildPayload(PaymentRecord $payment): array
     {
-        $bank = $payment->toBank;
+        $bank = $this->verificationIssuer($payment);
         $payload = [
             'bank' => $bank?->check_et_code ?: strtolower((string) $bank?->code),
             'transaction_number' => $payment->transaction_id_raw,
@@ -42,6 +43,16 @@ class CheckEtClient
 
         // Deliberately no origin/domain/brand/agent/employee/purpose/amount fields.
         return array_filter($payload, fn ($v) => $v !== null && $v !== '');
+    }
+
+    /**
+     * Transaction references belong to their issuing institution, not
+     * necessarily to the institution receiving the money.
+     */
+    private function verificationIssuer(PaymentRecord $payment): ?\App\Models\Bank
+    {
+        $payment->loadMissing(['fromBank','toBank']);
+        return $payment->fromBank ?: $payment->toBank;
     }
 
     public function verify(PaymentRecord $payment): CheckEtResult
