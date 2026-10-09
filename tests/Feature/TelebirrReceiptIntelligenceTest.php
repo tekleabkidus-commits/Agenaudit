@@ -30,6 +30,7 @@ class TelebirrReceiptIntelligenceTest extends TestCase
             'amount_role'=>'total_debit',
             'service_fee'=>7,
             'fee_vat'=>1,
+            'fee_components_complete'=>true,
             'total_debited'=>30008,
         ], $extra);
     }
