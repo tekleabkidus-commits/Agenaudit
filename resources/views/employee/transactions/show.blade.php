@@ -16,6 +16,12 @@
         ->where('status',App\Enums\EvidenceStatus::PendingEmployeeConfirmation);
 
     $finalized = in_array($transaction->status->value,['completed','rejected','cancelled'],true);
+    $liveEvidence = $transaction->evidenceFiles->whereNull('superseded_by_id')->sortBy('id');
+    $isReadingEvidence = $liveEvidence->contains(fn ($e) => in_array(
+        $e->status, [App\Enums\EvidenceStatus::Queued, App\Enums\EvidenceStatus::Processing], true
+    ));
+    $readingFingerprint = $transaction->status->value.'|'.$liveEvidence
+        ->map(fn ($e) => $e->id.':'.$e->status->value)->implode('|');
 @endphp
 
 <div class="mobile-workspace">
@@ -29,6 +35,19 @@
             {{ str($transaction->status->value)->replace('_',' ')->title() }}
         </span>
     </div>
+
+    @if($isReadingEvidence)
+        <section class="card" id="live-evidence-progress" role="status" aria-live="polite" style="margin:12px 0">
+            <div class="card-title-row">
+                <div>
+                    <span class="eyebrow">LIVE AI READING</span>
+                    <h3>Reading your uploaded screenshots…</h3>
+                    <p id="evidence-progress-message">Gemini will extract the details and update this page automatically.</p>
+                </div>
+                <span class="status-pill info">Reading</span>
+            </div>
+        </section>
+    @endif
 
     @if($transaction->review_reason)
         <div class="alert warning">{{ $transaction->review_reason }}</div>
@@ -452,4 +471,42 @@
         </form>
     @endif
 </div>
+
+@if($isReadingEvidence)
+<script>
+(function () {
+    const url = @json(route('employee.transactions.processing-status', $transaction));
+    const initial = @json($readingFingerprint);
+    const message = document.getElementById('evidence-progress-message');
+    const started = Date.now();
+
+    async function update() {
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {'Accept':'application/json'}
+            });
+            if (response.ok) {
+                const body = await response.json();
+                if (body.fingerprint !== initial) {
+                    window.location.reload();
+                    return;
+                }
+            }
+        } catch (_) {
+            // A temporary network error does not mean the AI failed.
+        }
+
+        if (message && Date.now() - started > 30000) {
+            message.textContent = 'This is taking longer than expected. The queue worker or AI provider may be delayed. You can leave this page; the screenshots remain saved.';
+        }
+        window.setTimeout(update, 1800);
+    }
+
+    window.setTimeout(update, 1500);
+})();
+</script>
+@endif
 @endsection
