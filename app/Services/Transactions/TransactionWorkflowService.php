@@ -132,7 +132,25 @@ class TransactionWorkflowService
         }
 
         if ($payments->contains(fn ($p) => $p->internal_status === PaymentValidationStatus::Review)) {
-            $transaction->update(['status'=>TransactionStatus::NeedsClearerScreenshot,'review_reason'=>'A bank payment cannot be uniquely verified from the screenshot.']);
+            $requiresAdmin = $payments->contains(fn ($p) => $p->internal_status === PaymentValidationStatus::Review
+                && in_array($p->rejection_code, [
+                    'transfer_amount_unconfirmed',
+                    'verification_amount_semantics_unknown',
+                ], true));
+
+            // Never retain an earlier positive valid total when a screenshot
+            // has been reprocessed and is now unresolved.
+            $confirmed = round((float)$payments
+                ->filter(fn ($p) => $p->internal_status === PaymentValidationStatus::Valid)
+                ->sum('amount'),2);
+            $transaction->update([
+                'status'=>$requiresAdmin ? TransactionStatus::PendingAdminReview : TransactionStatus::NeedsClearerScreenshot,
+                'valid_payment_total'=>$confirmed,
+                'bank_payment_total'=>round((float)$payments->sum('amount'),2),
+                'review_reason'=>$requiresAdmin
+                    ? 'Bank/wallet fees may be included in the payer debit. Check.et response amount semantics are not confirmed. Admin must check the official receipt before counting this payment.'
+                    : 'A bank payment cannot be uniquely verified from the screenshot.',
+            ]);
             return $transaction->fresh();
         }
 
