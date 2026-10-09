@@ -107,7 +107,7 @@ TEXT;
             return $common."\nThis is an AGENT SYSTEM screenshot. Extract the agent ID, agent username, optional brand hint, credited/removed/commission amount, transaction timestamp, optional balance before/after, and optional internal transaction reference.";
         }
 
-        return $common."\nThis is a BANK/WALLET PAYMENT screenshot. Extract the institution the money came FROM and the institution it went TO separately, sender account/phone and full visible sender name when present, receiver account/phone and full receiver name, amount, bank transaction/reference ID, transaction timestamp, and visible status. Do not substitute the same bank for both sides unless the screenshot actually shows that.";
+        return $common."\nThis is a BANK/WALLET PAYMENT screenshot. Extract FROM and TO independently, sender account/phone and name, receiver account/phone and name, amount, bank transaction/reference ID, timestamp and status. Do not invent the source from the destination bank. Identify Telebirr receipt templates only when their distinctive elements are ACTUALLY VISIBLE: (1) ethio_telecom_header + telebirr_payment_mode => telebirr_pdf; (2) green_success_check + dj_reference + transaction_to_label + at least two of zemen_gebeya_banner, green_qr_label, download_share_bar, telebirr_receipt_url => telebirr_green_success; (3) blue_payment_success + payment_method_label + payment_qr_code + dj_reference => telebirr_blue_success; (4) miniapp_storefront_icon + transaction_detail_heading + get_invoice_link + dj_reference => telebirr_miniapp. Return receipt_template and only literally observed visual_indicators; NEVER infer missing bank names from green color, ZemenGebeya ads, DJ reference alone, or success icons. A bank name in Transaction To is RECEIVER, not SENDER. from_bank_label_visible=true only if sender institution is explicitly named. transfer_type=wallet_to_bank only if explicit bank destination; wallet_to_wallet only if explicitly wallet transfer and receiver phone is visible; otherwise unknown. For receipts showing negative outgoing amount, distinguish amount_role=total_debit from transfer_amount only if labeling supports it. If invoice explicitly shows settled_amount and total_debited, return both, plus service_fee and fee_vat. Do NOT guess or subtract fees based on common amounts. Return null for unreadable fields.";
     }
 
     public function schema(EvidenceKind $kind): array
@@ -159,8 +159,18 @@ TEXT;
                 'transaction_id' => $nullableString,
                 'transaction_at' => $nullableString,
                 'status' => $nullableString,
+                'receipt_template' => $nullableString,
+                'visual_indicators' => ['type'=>'array','items'=>['type'=>'string']],
+                'from_bank_label_visible' => ['type'=>'boolean'],
+                'transfer_type' => $nullableString,
+                'amount_role' => $nullableString,
+                'settled_amount' => $nullableNumber,
+                'total_debited' => $nullableNumber,
+                'service_fee' => $nullableNumber,
+                'fee_vat' => $nullableNumber,
+
             ],
-            'required' => ['quality', 'from_bank', 'to_bank', 'sender_account', 'sender_name', 'receiver_account', 'receiver_name', 'amount', 'transaction_id', 'transaction_at', 'status'],
+            'required' => ['quality','from_bank','to_bank','sender_account','sender_name','receiver_account','receiver_name','amount','transaction_id','transaction_at','status','receipt_template','visual_indicators','from_bank_label_visible','transfer_type','amount_role','settled_amount','total_debited','service_fee','fee_vat'],
         ];
     }
 }
