@@ -14,6 +14,11 @@ return [
         'allowed_mimes' => ['image/jpeg', 'image/png', 'image/webp'],
         'max_bank_screenshots_per_transaction' => 12,
         'max_agent_proof_images_per_transaction' => 5,
+        // The agent proof is the critical first step; avoid any background
+        // queue delay on production. Disable explicitly if the web request
+        // budget cannot support the configured AI provider.
+        'fast_agent_extraction' => (bool) env('AI_AGENT_FAST_PATH', env('APP_ENV', 'local') === 'production'),
+        'fast_agent_timeout_seconds' => (int) env('AI_AGENT_FAST_TIMEOUT_SECONDS', 18),
     ],
     'hard_non_correctable_fields' => [
         'receiver_bank',
