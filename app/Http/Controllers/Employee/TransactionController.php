@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Employee;
 
 use App\Enums\EvidenceKind;
+use App\Enums\EvidenceStatus;
 use App\Enums\RiskLevel;
 use App\Enums\TransactionStatus;
 use App\Enums\TransactionType;
@@ -245,6 +246,32 @@ class TransactionController extends Controller
             'commissionRemainingThisMonth',
             'referenceReconciliation'
         ));
+    }
+
+    /**
+     * Lightweight polling endpoint for the Employee's open transaction.
+     * Returns workflow states only, never private screenshot data or AI JSON.
+     */
+    public function processingStatus(Request $request, Transaction $transaction): \Illuminate\Http\JsonResponse
+    {
+        $this->authorize('view', $transaction);
+
+        $evidences = $transaction->evidenceFiles()
+            ->whereNull('superseded_by_id')
+            ->orderBy('id')
+            ->get(['id','status']);
+
+        $fingerprint = $transaction->status->value.'|'.$evidences
+            ->map(fn ($file) => $file->id.':'.$file->status->value)
+            ->implode('|');
+
+        return response()->json([
+            'fingerprint'=>$fingerprint,
+            'processing'=>$evidences->contains(fn ($file) => in_array($file->status, [
+                EvidenceStatus::Queued,
+                EvidenceStatus::Processing,
+            ], true)),
+        ])->header('Cache-Control', 'private, no-store, max-age=0');
     }
 
     public function reason(Request $request, Transaction $transaction, TransactionWorkflowService $workflow): RedirectResponse
