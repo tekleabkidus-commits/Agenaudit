@@ -53,6 +53,18 @@ class EvidenceProcessor
         }
 
 
+        // Claim the queue item atomically. A fast web request and an old
+        // queued worker can race after a retry, but only one may call Gemini
+        // or apply the resulting financial change.
+        $claimed = EvidenceFile::query()
+            ->whereKey($evidence->id)
+            ->where('status', EvidenceStatus::Queued->value)
+            ->update(['status'=>EvidenceStatus::Processing->value]);
+        if ($claimed !== 1) {
+            return;
+        }
+        $evidence->refresh();
+
         if (!$this->aiEnabledFor($evidence->kind)) {
             foreach ($group as $file) {
                 $file->update([
