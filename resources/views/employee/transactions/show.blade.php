@@ -85,6 +85,35 @@
                 <div><span>Receipts needing amount review</span><b>{{ $unresolvedRows->count() }}</b></div>
                 <div><span>Readable receipts without successful Check.et verification</span><b>{{ $unverifiedRows->count() }}</b></div>
             </div>
+            @if($referenceReconciliation['target_cents'] !== null)
+                <div class="confidence-review" style="margin-top:14px">
+                    <div class="step-heading">
+                        <div><span class="eyebrow">AGENT TOP-UP AS REFERENCE</span><h3>Reference-assisted payment breakdown</h3></div>
+                    </div>
+                    <div class="readonly-grid">
+                        <div class="lock-field"><span>AGENT CREDITED</span><b>{{ number_format($referenceReconciliation['target_cents']/100,2) }} ETB</b></div>
+                        <div class="lock-field"><span>READABLE RECEIPT PRINCIPALS</span><b>{{ number_format($referenceReconciliation['readable_principal_cents']/100,2) }} ETB</b></div>
+                        <div class="lock-field"><span>CHECK.ET CONFIRMED</span><b>{{ number_format($referenceReconciliation['check_et_confirmed_cents']/100,2) }} ETB</b></div>
+                        <div class="lock-field"><span>UNEXPLAINED BALANCE TO MATCH</span><b>{{ number_format($referenceReconciliation['remainder_cents']/100,2) }} ETB</b></div>
+                    </div>
+                    @if($referenceReconciliation['candidate'])
+                        @php $candidate=$referenceReconciliation['candidate']; @endphp
+                        <div class="alert warning" style="margin-top:12px">
+                            <b>Possible transfer amount for receipt {{ $candidate['payment_id'] }}: {{ number_format($candidate['candidate_principal_cents']/100,2) }} ETB.</b><br>
+                            Screenshot payer debit: {{ number_format($candidate['payer_debit_cents']/100,2) }} ETB.<br>
+                            Implied charges: {{ number_format($candidate['implied_charges_cents']/100,2) }} ETB.<br>
+                            <b>Reference estimate only—not bank verified.</b> Compare the original invoice or receiving-bank statement, or use Check.et Recheck. The estimated amount is not added to the valid payment total.
+                        </div>
+                    @elseif($referenceReconciliation['uncertain_count']>0)
+                        <div class="alert warning" style="margin-top:12px">
+                            <b>{{ $referenceReconciliation['uncertain_count'] }} receipt(s) still have unknown actual transfer amounts.</b>
+                            {{ $referenceReconciliation['explanation'] }}
+                        </div>
+                    @else
+                        <div class="small muted" style="margin-top:10px">{{ $referenceReconciliation['explanation'] }}</div>
+                    @endif
+                </div>
+            @endif
             <p class="small muted" style="margin-top:10px">An Employee may credit the agent once using several separate payments. Matching the agent amount helps reconcile the receipts, but does not prove that the bank received the money. Unknown fees are not subtracted by guessing.</p>
 
             @if(!$finalized && $eligibleRows->isNotEmpty())
