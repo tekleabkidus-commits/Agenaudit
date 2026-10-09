@@ -19,7 +19,7 @@ jobs:
       - name: Wait for latest release marker on Laravel Cloud
         run: |
           url="https://agenaudit-production-mfxsno.laravel.cloud/agenaudit-release.txt"
-          expected="agenaudit-2026-10-09-reference-recheck-dd66dfaa"
+          expected="agenaudit-fast-agent-reading-2026-10-09-8ef6a0bd"
           for attempt in $(seq 1 24); do
             actual=$(curl -fLsS --max-time 20 "$url" 2>/dev/null || true)
             if [ "$actual" = "$expected" ]; then
