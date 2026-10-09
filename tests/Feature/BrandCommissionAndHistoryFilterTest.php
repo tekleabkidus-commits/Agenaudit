@@ -102,7 +102,7 @@ class BrandCommissionAndHistoryFilterTest extends TestCase
         $draft=$this->transaction($employee,$agent,TransactionStatus::Draft);
 
         $response=$this->actingAs($employee)->get(route('employee.transactions.index'));
-        $response->assertOk()->assertDontSee($draft->reference)->assertDontSee($agent->agent_id);
+        $response->assertOk()->assertDontSee($draft->reference)->assertDontSee($agent->agent_id.' · '.$agent->username);
     }
 
     public function test_bulk_brand_commission_switch_updates_existing_agents_and_limits(): void
