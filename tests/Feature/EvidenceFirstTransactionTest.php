@@ -376,7 +376,7 @@ class EvidenceFirstTransactionTest extends TestCase
 
         $first=$this->actingAs($employee)->getJson($url)->assertOk()
             ->assertJsonPath('processing',true)
-            ->assertHeader('Cache-Control','private, no-store, max-age=0')
+            ->assertHeader('Cache-Control','max-age=0, no-store, private')
             ->json('fingerprint');
 
         $this->actingAs($employee)->get(route('employee.transactions.show',$tx))
