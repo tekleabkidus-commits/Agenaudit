@@ -94,6 +94,12 @@
 
             <div class="detail-grid compact-details">
                 <div><span>Amount</span><b>{{ number_format((float)$payment->amount,2) }} ETB</b></div>
+                @if(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.family'))
+                    <div><span>Receipt identity</span><b>{{ str(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.family'))->replace('_',' ')->title() }}</b>
+                        <small>Based on screenshot patterns; not proof of payment settlement</small></div>
+                    <div><span>Sender identification</span><b>{{ str(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.source_method','unconfirmed'))->replace('_',' ')->title() }}</b></div>
+                    <div><span>Amount basis</span><b>{{ str(data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.amount_source','screenshot_amount'))->replace('_',' ')->title() }}</b></div>
+                @endif
                 <div><span>Date/time</span><b>{{ $payment->transaction_at?->format('d M Y H:i:s') ?? '—' }}</b></div>
                 <div><span>Sender</span><b>{{ $payment->sender_name ?: '—' }}</b><small>{{ $payment->sender_account ?: '—' }}</small></div>
                 <div><span>Receiver</span><b>{{ $payment->receiver_name ?: '—' }}</b><small>{{ $payment->receiver_account ?: '—' }}</small></div>
