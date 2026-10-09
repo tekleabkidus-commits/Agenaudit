@@ -3,7 +3,7 @@
 namespace App\Services\Banking;
 
 /**
- * Conservative Telebirr receipt intelligence. The vision model supplies
+ * Conservative bank and wallet receipt intelligence. The vision model supplies
  * observed markers; server-side rules check their combination. Template
  * recognition is NOT proof of settlement or of the receiving account.
  *
@@ -85,42 +85,68 @@ class ReceiptIntelligence
             $payload['to_bank'] = 'Telebirr';
         }
 
+        // Amount and fee handling is BANK-AGNOSTIC. Recognition of an issuer
+        // and reconciliation of money transferred are independent operations.
         $raw = $this->positiveAmount($payload['amount'] ?? null);
         $settled = $this->positiveAmount($payload['settled_amount'] ?? null);
         $debited = $this->positiveAmount($payload['total_debited'] ?? null);
         $fee = $this->nonNegativeAmount($payload['service_fee'] ?? null);
         $vat = $this->nonNegativeAmount($payload['fee_vat'] ?? null);
+        $otherFees = $this->nonNegativeAmount($payload['other_fees'] ?? null);
+        $statedTotalFees = $this->nonNegativeAmount($payload['total_fees'] ?? null);
         $role = strtolower(trim((string)($payload['amount_role'] ?? 'unknown')));
-        $amountSource = 'screenshot_amount';
+        $hasAmountClassification = array_key_exists('amount_role', $payload)
+            || array_key_exists('settled_amount', $payload)
+            || array_key_exists('total_debited', $payload);
+
+        $components = array_values(array_filter([$fee, $vat, $otherFees], fn ($v) => $v !== null));
+        $componentSum = $components === [] ? null : round(array_sum($components), 2);
+        // A stated total fee includes its components. Never add it to them.
+        $totalFees = $statedTotalFees ?? $componentSum;
+        $amountSource = 'legacy_screenshot_amount';
         $amountNeedsReview = false;
 
-        if ($templateMatch) {
-            if ($settled !== null) {
-                $payload['amount'] = $settled;
-                $amountSource = 'explicit_settled_amount';
+        if ($statedTotalFees !== null && $componentSum !== null
+            && $componentSum > $statedTotalFees + 0.009) {
+            $amountNeedsReview = true;
+        }
 
-                if ($debited !== null && $debited + 0.009 < $settled) {
-                    $amountNeedsReview = true;
-                }
-            } elseif ($role === 'total_debit') {
-                // Never subtract an assumed flat Telebirr fee.
-                if ($debited !== null && $fee !== null) {
-                    $net = round($debited - $fee - ($vat ?? 0), 2);
-                    if ($net > 0 && ($raw === null || abs($raw - $debited) < 0.01)) {
-                        $payload['amount'] = $net;
-                        $amountSource = 'debit_minus_explicit_fees';
-                    } else {
-                        $amountNeedsReview = true;
-                    }
-                } else {
-                    $amountNeedsReview = true;
-                }
-            } elseif ($role === 'transfer_amount' && $raw !== null) {
-                $payload['amount'] = $raw;
-                $amountSource = 'explicit_transfer_amount';
+        if ($settled !== null) {
+            $payload['amount'] = $settled;
+            $amountSource = 'explicit_settled_amount';
+        } elseif ($role === 'transfer_amount' && $raw !== null) {
+            // The visible amount is explicitly TRANSFERRED or RECEIVED.
+            // A separately itemized sender fee is irrelevant to that amount.
+            $payload['amount'] = $raw;
+            $amountSource = 'explicit_transfer_amount';
+        } elseif ($role === 'total_debit') {
+            // Only subtract fees actually shown on this particular receipt.
+            // Absent fee information means UNKNOWN, never zero.
+            $actualDebit = $debited ?? $raw;
+            if ($actualDebit !== null && $totalFees !== null && $actualDebit > $totalFees
+                && ($raw === null || $debited === null || abs($raw - $debited) <= 0.009)) {
+                $payload['amount'] = round($actualDebit - $totalFees, 2);
+                $amountSource = 'debit_minus_explicit_fees';
             } else {
-                // Many green receipts display -30,008 without identifying
-                // whether the debit includes an 8 ETB fee.
+                $amountNeedsReview = true;
+                $amountSource = 'unverified_total_debit';
+            }
+        } elseif ($hasAmountClassification) {
+            // All current vision drivers return amount_role; if unreadable,
+            // the screenshot value cannot be counted as a transfer amount.
+            // Check.et may later independently supply the verified amount.
+            $amountNeedsReview = true;
+            $amountSource = 'unconfirmed_amount_role';
+        }
+
+        if ($settled !== null && $debited !== null) {
+            if ($debited + 0.009 < $settled) {
+                $amountNeedsReview = true;
+            } elseif ($totalFees !== null && abs($debited - $settled - $totalFees) > 0.009) {
+                $amountNeedsReview = true;
+            }
+        } elseif ($role === 'transfer_amount' && $raw !== null && $debited !== null) {
+            if ($debited + 0.009 < $raw || ($totalFees !== null && abs($debited - $raw - $totalFees) > 0.009)) {
                 $amountNeedsReview = true;
             }
         }
@@ -131,9 +157,13 @@ class ReceiptIntelligence
             'indicators' => $features,
             'amount_source' => $amountSource,
             'amount_needs_review' => $amountNeedsReview,
+            'amount_role' => $role,
+            'settled_amount' => $settled,
             'total_debited' => $debited,
             'service_fee' => $fee,
             'fee_vat' => $vat,
+            'other_fees' => $otherFees,
+            'total_fees' => $totalFees,
         ];
 
         return $payload;
