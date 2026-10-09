@@ -54,9 +54,12 @@ class TelebirrReceiptIntelligenceTest extends TestCase
         $this->assertEquals(30008,$result['amount']);
         $this->assertTrue($result['_receipt_intelligence']['amount_needs_review']);
 
-        $this->expectException(ReviewRequiredException::class);
+        // Uncertain fee information must be routed to the verifier, not
+        // prematurely accepted, rejected, or blocked before bank lookup.
+        $this->assertSame('unverified_total_debit',$result['_receipt_intelligence']['amount_source']);
         app(ExtractionGuard::class)->assertUsable(array_merge($result,[
             'quality'=>['score'=>.99,'critical_confidence'=>.99,'issues'=>[]],
+            'to_bank'=>'Telebirr',
             'receiver_account'=>'251900000001',
             'receiver_name'=>'Example',
             'transaction_at'=>now()->toIso8601String(),
