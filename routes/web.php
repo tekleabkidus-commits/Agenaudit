@@ -102,6 +102,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/transactions/start/{type}/evidence', [TransactionController::class, 'storeInitialEvidence'])
             ->middleware('throttle:uploads')->name('transactions.initial-evidence.store');
         Route::get('/transactions/{transaction}', [TransactionController::class, 'show'])->name('transactions.show');
+        Route::get('/transactions/{transaction}/processing-status', [TransactionController::class, 'processingStatus'])
+            ->middleware('throttle:90,1')->name('transactions.processing-status');
         Route::post('/transactions/{transaction}/agent-evidence', [EvidenceController::class, 'agent'])->middleware('throttle:uploads')->name('transactions.agent-evidence');
         Route::post('/transactions/{transaction}/bank-evidence', [EvidenceController::class, 'banks'])->middleware('throttle:uploads')->name('transactions.bank-evidence');
         Route::post('/transactions/{transaction}/recheck-check-et', [CheckEtRecheckController::class, 'all'])
