@@ -53,6 +53,46 @@
         </section>
     @endif
 
+    @if($transaction->type->requiresBankEvidence() && $transaction->agent_id)
+        @php
+            $paymentRows = $transaction->payments;
+            $confirmedRows = $paymentRows->filter(fn($p) => $p->internal_status === App\Enums\PaymentValidationStatus::Valid);
+            $unresolvedRows = $paymentRows->filter(fn($p) => $p->internal_status === App\Enums\PaymentValidationStatus::Review);
+            $unverifiedRows = $confirmedRows->filter(fn($p) => $p->external_status !== App\Enums\ExternalVerificationStatus::Passed);
+            $confirmedSum = (float) $confirmedRows->sum('amount');
+            $targetTopup = $transaction->type === App\Enums\TransactionType::CreditRepayment ? null : (float) $transaction->amount;
+            $eligibleRows = $paymentRows->filter(fn($p) =>
+                $p->internal_status === App\Enums\PaymentValidationStatus::Valid
+                || ($p->internal_status === App\Enums\PaymentValidationStatus::Review
+                    && in_array($p->rejection_code, ['transfer_amount_unconfirmed','verification_amount_semantics_unknown'], true))
+            );
+        @endphp
+        <section class="card validation-card" style="margin-top:14px">
+            <div class="card-title-row">
+                <div><span class="eyebrow">RECEIPT RECONCILIATION</span><h3>One agent top-up · multiple bank transfers</h3></div>
+                <span class="count-pill">{{ $paymentRows->count() }} receipt(s)</span>
+            </div>
+            <div class="validation-list">
+                <div><span>Agent-system top-up target</span><b>{{ $targetTopup !== null ? number_format($targetTopup,2).' ETB' : 'Outstanding credit repayment' }}</b></div>
+                <div><span>Amounts supported by readable receipt evidence</span><b>{{ number_format($confirmedSum,2) }} ETB</b></div>
+                @if($targetTopup !== null)
+                    <div><span>Difference from target (not a bank verification)</span><b>{{ number_format($confirmedSum - $targetTopup,2) }} ETB</b></div>
+                @endif
+                <div><span>Receipts needing amount review</span><b>{{ $unresolvedRows->count() }}</b></div>
+                <div><span>Readable receipts without successful Check.et verification</span><b>{{ $unverifiedRows->count() }}</b></div>
+            </div>
+            <p class="small muted" style="margin-top:10px">An Employee may credit the agent once using several separate payments. Matching the agent amount helps reconcile the receipts, but does not prove that the bank received the money. Unknown fees are not subtracted by guessing.</p>
+
+            @if(!$finalized && $eligibleRows->isNotEmpty())
+                <form method="post" action="{{ route('employee.transactions.recheck-check-et',$transaction) }}" style="margin-top:12px">
+                    @csrf
+                    <button class="btn btn-primary" type="submit">↻ Recheck all {{ $eligibleRows->count() }} receipt(s) with Check.et</button>
+                </form>
+                <p class="tiny muted" style="margin-top:8px">Runs in the background using saved references. Refresh this page after the queue worker finishes; no reupload required. A failed check keeps the transaction pending.</p>
+            @endif
+        </section>
+    @endif
+
     @if($transaction->type === App\Enums\TransactionType::Commission && $transaction->agent)
         <section class="card commission-eligibility {{ $transaction->agent->commission_enabled && $transaction->agent->brand?->commission_enabled ? 'enabled' : 'disabled' }}">
             <div class="card-title-row">
@@ -224,11 +264,27 @@
                     </div>
 
                     <div class="readonly-grid">
-                        <div class="lock-field"><span>AMOUNT 🔒</span><b>{{ number_format((float)$payment->amount,2) }} ETB</b></div>
+                        <div class="lock-field"><span>{{ data_get($payment->evidenceFile?->extracted,'_receipt_intelligence.amount_needs_review',false) ? 'SENDER DEBIT · AMOUNT UNCONFIRMED' : 'TRANSFER AMOUNT' }} 🔒</span><b>{{ number_format((float)$payment->amount,2) }} ETB</b></div>
+                        <div class="lock-field"><span>CHECK.ET STATUS</span><b>{{ str($payment->external_status?->value??'pending')->replace('_',' ')->title() }}</b></div>
+                        <div class="lock-field"><span>LAST CHECK</span><b>{{ $payment->external_checked_at?->format('d M Y H:i') ?? 'Not checked yet' }}</b></div>
                         <div class="lock-field"><span>TIME 🔒</span><b>{{ $payment->transaction_at?->format('d M Y H:i') ?? '—' }}</b></div>
                         <div class="lock-field"><span>FROM 🔒</span><b>{{ $payment->sender_name ?: '—' }} · {{ $payment->sender_account ?: '—' }}</b></div>
                         <div class="lock-field"><span>TO 🔒</span><b>{{ $payment->receiver_name ?: '—' }} · {{ $payment->receiver_account ?: '—' }}</b></div>
                     </div>
+
+                    @if(!$finalized && ($payment->internal_status === App\Enums\PaymentValidationStatus::Valid
+                        || ($payment->internal_status === App\Enums\PaymentValidationStatus::Review
+                            && in_array($payment->rejection_code, ['transfer_amount_unconfirmed','verification_amount_semantics_unknown'], true))))
+                        <form method="post" action="{{ route('employee.transactions.payments.recheck-check-et',[$transaction,$payment]) }}" style="margin-top:10px">
+                            @csrf
+                            <button type="submit" class="btn btn-outline btn-sm">↻ Recheck this receipt</button>
+                        </form>
+                    @endif
+                    @if($payment->internal_status === App\Enums\PaymentValidationStatus::Review)
+                        <div class="alert warning" style="margin-top:10px"><b>Not counted toward the top-up.</b> {{ $payment->rejection_reason ?: 'Bank verification or amount review is still required.' }}</div>
+                    @elseif($payment->external_status === App\Enums\ExternalVerificationStatus::Unavailable)
+                        <div class="alert warning" style="margin-top:10px"><b>Check.et unavailable or inconclusive.</b> Screenshot values are provisional. Use Recheck when the provider is available.</div>
+                    @endif
 
                     @if($payment->internal_status->value==='rejected')
                         <div class="alert error" style="margin-top:10px">
