@@ -17,17 +17,17 @@ class BankController extends Controller
     public function store(Request $request, AuditLogger $audit): RedirectResponse
     {
         $request->merge(['code'=>Str::upper(trim((string)$request->input('code')))]);
-        $data=$request->validate(['name'=>['required','string','max:120'],'code'=>['required','string','max:40','unique:banks,code'],'aliases'=>['nullable','string'],'check_et_code'=>['nullable','string','max:40'],'check_et_account_source'=>['nullable',Rule::in(['receiving_account','sender_account','none'])]]);
-        $bank=Bank::create(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'check_et_account_source'=>$data['check_et_account_source']??'none','is_active'=>true]);
+        $data=$request->validate(['name'=>['required','string','max:120'],'code'=>['required','string','max:40','unique:banks,code'],'aliases'=>['nullable','string'],'check_et_code'=>['nullable','string','max:40'],'check_et_account_source'=>['nullable',Rule::in(['receiving_account','sender_account','none'])],'check_et_amount_meaning'=>['nullable',Rule::in(['unknown','transfer_amount','total_debit'])]]);
+        $bank=Bank::create(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'check_et_account_source'=>$data['check_et_account_source']??'none','check_et_amount_meaning'=>$data['check_et_amount_meaning']??'unknown','is_active'=>true]);
         $audit->log('bank.created',$bank,null,$bank->toArray());
         return back()->with('success','Bank added.');
     }
     public function update(Request $request, Bank $bank, AuditLogger $audit): RedirectResponse
     {
         $request->merge(['code'=>Str::upper(trim((string)$request->input('code')))]);
-        $data=$request->validate(['name'=>['required','string','max:120'],'code'=>['required','string','max:40',Rule::unique('banks','code')->ignore($bank->id)],'aliases'=>['nullable','string'],'check_et_code'=>['nullable','string','max:40'],'check_et_account_source'=>['nullable',Rule::in(['receiving_account','sender_account','none'])]]);
+        $data=$request->validate(['name'=>['required','string','max:120'],'code'=>['required','string','max:40',Rule::unique('banks','code')->ignore($bank->id)],'aliases'=>['nullable','string'],'check_et_code'=>['nullable','string','max:40'],'check_et_account_source'=>['nullable',Rule::in(['receiving_account','sender_account','none'])],'check_et_amount_meaning'=>['nullable',Rule::in(['unknown','transfer_amount','total_debit'])]]);
         $before=$bank->toArray();
-        $bank->update(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'check_et_account_source'=>$data['check_et_account_source']??'none','is_active'=>$request->boolean('is_active')]);
+        $bank->update(['name'=>$data['name'],'code'=>Str::upper($data['code']),'aliases'=>$this->aliases($data['aliases']??null),'check_et_code'=>$data['check_et_code']??null,'check_et_enabled'=>$request->boolean('check_et_enabled'),'check_et_requires_account'=>$request->boolean('check_et_requires_account'),'check_et_account_source'=>$data['check_et_account_source']??'none','check_et_amount_meaning'=>$data['check_et_amount_meaning']??'unknown','is_active'=>$request->boolean('is_active')]);
         $audit->log('bank.updated',$bank,$before,$bank->toArray());
         return back()->with('success','Bank updated.');
     }
