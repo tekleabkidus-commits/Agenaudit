@@ -22,6 +22,15 @@
                 <div class="field"><label>Aliases</label><input class="input" name="aliases" placeholder="CBE, Commercial Bank of Ethiopia"></div>
                 <div class="field"><label>Check.et code</label><input class="input" name="check_et_code" placeholder="cbe"></div>
                 <div class="field">
+                    <label>Check.et amount meaning (default: Unknown)</label>
+                    <select class="select" name="check_et_amount_meaning">
+                        <option value="unknown">Unknown — do not assume fees are excluded</option>
+                        <option value="transfer_amount">Verified transfer principal — excludes sender fees</option>
+                        <option value="total_debit">Verified payer total debit — may include fees</option>
+                    </select>
+                    <small>Set only after comparing genuine official bank receipts to Check.et API responses. Transfer principal does not necessarily prove net credited if receiving fees apply.</small>
+                </div>
+                <div class="field">
                     <label>Account source for Check.et</label>
                     <select class="select" name="check_et_account_source">
                         <option value="none">Not required</option>
@@ -58,6 +67,15 @@
                             <div class="field"><label>Code</label><input class="input" name="code" value="{{ $bank->code }}"></div>
                             <div class="field"><label>Aliases</label><input class="input" name="aliases" value="{{ implode(', ',$bank->aliases??[]) }}"></div>
                             <div class="field"><label>Check.et code</label><input class="input" name="check_et_code" value="{{ $bank->check_et_code }}"></div>
+                            <div class="field">
+                                <label>Meaning of Check.et response amount</label>
+                                <select class="select" name="check_et_amount_meaning">
+                                    <option value="unknown" @selected($bank->check_et_amount_meaning==='unknown')>Unknown — send to review on ambiguity</option>
+                                    <option value="transfer_amount" @selected($bank->check_et_amount_meaning==='transfer_amount')>Verified transfer principal (excludes sender fees)</option>
+                                    <option value="total_debit" @selected($bank->check_et_amount_meaning==='total_debit')>Payer debit (may include fees)</option>
+                                </select>
+                                <small>Do not classify by provider name alone. Compare multiple known receipts before changing this setting.</small>
+                            </div>
                             <div class="field"><label>Check.et account source</label><select class="select" name="check_et_account_source"><option value="none" @selected(($bank->check_et_account_source??'none')==='none')>No account</option><option value="receiving_account" @selected($bank->check_et_account_source==='receiving_account')>Receiving account</option><option value="sender_account" @selected($bank->check_et_account_source==='sender_account')>Sender account / phone</option></select></div>
                         </div>
                         <div class="toggle-grid">
