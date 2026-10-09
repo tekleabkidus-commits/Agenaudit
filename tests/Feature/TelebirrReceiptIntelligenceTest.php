@@ -124,4 +124,22 @@ class TelebirrReceiptIntelligenceTest extends TestCase
         ]));
         $this->assertSame('Telebirr',$result['to_bank']);
     }
+    public function test_cross_bank_reference_is_checked_against_sender_issuer_not_destination(): void
+    {
+        $sender=\App\Models\Bank::query()->where('code','TELEBIRR')->firstOrFail();
+        $receiver=\App\Models\Bank::query()->where('code','BOA')->firstOrFail();
+
+        $record=new \App\Models\PaymentRecord([
+            'transaction_id_raw'=>'DJ91L2R5RT',
+            'receiver_account'=>'11695183',
+        ]);
+        $record->setRelation('fromBank',$sender);
+        $record->setRelation('toBank',$receiver);
+
+        $payload=app(\App\Services\Integrations\CheckEtClient::class)->buildPayload($record);
+        $this->assertSame('telebirr',$payload['bank']);
+        $this->assertSame('DJ91L2R5RT',$payload['transaction_number']);
+        $this->assertArrayNotHasKey('account_number',$payload);
+    }
+
 }
