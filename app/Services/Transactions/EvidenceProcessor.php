@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\AI\ExtractionGuard;
 use App\Services\AI\VisionExtractorInterface;
 use App\Services\Banking\PaymentVerificationService;
+use App\Services\Banking\ReceiptIntelligence;
 use App\Services\SettingsService;
 use RuntimeException;
 use Throwable;
@@ -25,6 +26,7 @@ class EvidenceProcessor
         private ExtractionGuard $guard,
         private AgentIdentityService $agents,
         private PaymentVerificationService $payments,
+        private ReceiptIntelligence $receipts,
         private TransactionWorkflowService $workflow,
         private TransactionEventLogger $events,
         private SettingsService $settings,
@@ -76,6 +78,10 @@ class EvidenceProcessor
             $payload = $group->count() > 1
                 ? $this->vision->extractMany($group->all())
                 : $this->vision->extract($evidence);
+
+            if ($evidence->kind === EvidenceKind::BankPayment) {
+                $payload = $this->receipts->normalize($payload);
+            }
 
             if (
                 $evidence->kind === EvidenceKind::AgentSystem
