@@ -55,7 +55,7 @@ class CheckEtClient
         return $payment->fromBank ?: $payment->toBank;
     }
 
-    public function verify(PaymentRecord $payment): CheckEtResult
+    public function verify(PaymentRecord $payment, bool $allowScreenshotAmountDifference = false): CheckEtResult
     {
         if (!$this->enabledFor($payment)) return new CheckEtResult('disabled', [], []);
 
@@ -86,8 +86,25 @@ class CheckEtClient
         $exists = (bool) data_get($json, 'exists', $success);
         if (!$success || !$exists) return new CheckEtResult('failed', $json, array_keys($payload), data_get($json, 'message', 'Transaction not verified.'));
 
+        // Never use an OCR-only response as an authoritative financial
+        // amount. For ambiguous screenshots, the caller separately requires
+        // an official source and a positive verified amount.
         $officialAmount = data_get($json, 'data.receipt.amount');
-        if ($officialAmount !== null && abs((float) $officialAmount - (float) $payment->amount) > 0.009) {
+        if ($officialAmount !== null && (!is_numeric($officialAmount) || !is_finite((float)$officialAmount) || (float)$officialAmount <= 0)) {
+            return new CheckEtResult('failed', $json, array_keys($payload), 'Verified provider amount is invalid.');
+        }
+
+        $currency = strtoupper(trim((string)data_get($json,'data.receipt.currency','ETB')));
+        if ($currency !== '' && $currency !== 'ETB') {
+            return new CheckEtResult('failed', $json, array_keys($payload), 'Verified currency is not ETB.');
+        }
+
+        $status = strtolower(trim((string)data_get($json,'data.receipt.status','')));
+        if ($status !== '' && !in_array($status, ['completed','complete','success','successful','settled','paid'],true)) {
+            return new CheckEtResult('failed', $json, array_keys($payload), 'Official receipt is not in a completed state.');
+        }
+
+        if (!$allowScreenshotAmountDifference && $officialAmount !== null && abs((float)$officialAmount - (float)$payment->amount) > 0.009) {
             return new CheckEtResult('failed', $json, array_keys($payload), 'Verified bank amount does not match the screenshot amount.');
         }
 
