@@ -136,11 +136,17 @@ class CheckEtRecheckWorkflowTest extends TestCase
     {
         [$transaction]=$this->fixture();
 
-        $api = Http::sequence()
-            ->push($this->response(10000))
-            ->push($this->response(8000))
-            ->push(['message'=>'temporarily unavailable'],503);
-        Http::fake(['api.check.et/api/v1/verify'=>$api]);
+        $calls = 0;
+        Http::fake(['api.check.et/api/v1/verify' => function () use (&$calls) {
+            $calls++;
+            return match ($calls) {
+                1 => Http::response($this->response(10000), 200),
+                2 => Http::response($this->response(8000), 200),
+                // Laravel retries Check.et outages before returning unavailable.
+                3, 4 => Http::response(['message'=>'temporarily unavailable'], 503),
+                default => Http::response($this->response(12000), 200),
+            };
+        }]);
 
         $one=$this->receipt($transaction,1,10000,true);
         $two=$this->receipt($transaction,2,8000,true);
@@ -154,8 +160,6 @@ class CheckEtRecheckWorkflowTest extends TestCase
         $this->assertSame(TransactionStatus::PendingAdminReview,$before->status);
         $this->assertEquals(18000,$before->valid_payment_total);
 
-        Http::fake(['api.check.et/api/v1/verify'=>Http::response($this->response(12000),200)]);
-
         app(RecheckExternalPaymentsJob::class, [
             'transactionId'=>$transaction->id,
             'paymentId'=>$third->id,
@@ -167,7 +171,15 @@ class CheckEtRecheckWorkflowTest extends TestCase
         );
 
         $after=$transaction->fresh();
-        $this->assertSame(TransactionStatus::ReadyForReview,$after->status);
+        $this->assertSame(TransactionStatus::ReadyForReview,$after->status,
+            'After recheck: '.json_encode([
+                'calls'=>$calls,
+                'third_status'=>$third->fresh()->internal_status?->value,
+                'third_external'=>$third->fresh()->external_status?->value,
+                'third_reason'=>$third->fresh()->rejection_code,
+                'amount'=>$third->fresh()->amount,
+                'transaction_reason'=>$after->review_reason,
+            ]));
         $this->assertEquals(30000,$after->valid_payment_total);
         $this->assertEquals(0,$after->difference);
         $this->assertEquals(12000,$third->fresh()->amount);
@@ -208,8 +220,17 @@ class CheckEtRecheckWorkflowTest extends TestCase
     public function test_rejected_duplicate_cannot_be_rechecked(): void
     {
         [$tx,$owner]=$this->fixture();
+        $evidence=EvidenceFile::create([
+            'transaction_id'=>$tx->id,
+            'kind'=>EvidenceKind::BankPayment,
+            'sequence'=>1,'disk'=>'private','path'=>'tests/duplicate.png',
+            'original_name'=>'duplicate.png','mime_type'=>'image/png',
+            'size_bytes'=>100,'sha256'=>hash('sha256','recheck-duplicate'),
+            'status'=>EvidenceStatus::Extracted,
+        ]);
         $payment=PaymentRecord::create([
             'transaction_id'=>$tx->id,
+            'evidence_file_id'=>$evidence->id,
             'amount'=>10000,
             'internal_status'=>PaymentValidationStatus::Rejected,
             'external_status'=>ExternalVerificationStatus::NotRequired,
