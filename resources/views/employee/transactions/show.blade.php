@@ -215,10 +215,22 @@
                     </div>
                 </div>
             @else
+                @php $agentReading = in_array($agentEvidence->status,[App\Enums\EvidenceStatus::Queued,App\Enums\EvidenceStatus::Processing],true); @endphp
                 <div class="status-line">
-                    <span><b>Proof images processed</b><small class="muted">Quality {{ $agentEvidence->quality_score?round($agentEvidence->quality_score*100).'%':'—' }}</small></span>
-                    <span class="status-pill success">{{ str($agentEvidence->status->value)->replace('_',' ')->title() }}</span>
+                    <span>
+                        <b>{{ $agentReading ? 'AI is reading proof images' : 'Proof images processed' }}</b>
+                        <small class="muted">Quality {{ $agentEvidence->quality_score?round($agentEvidence->quality_score*100).'%':'—' }}</small>
+                    </span>
+                    <span class="status-pill {{ $agentReading?'warning':'success' }}">{{ str($agentEvidence->status->value)->replace('_',' ')->title() }}</span>
                 </div>
+
+                @if($agentEvidence->status === App\Enums\EvidenceStatus::Queued && config('agent_audit.evidence.fast_agent_extraction'))
+                    <form method="post" action="{{ route('employee.evidence.retry',$agentEvidence) }}" style="margin-top:10px">
+                        @csrf
+                        <button type="submit" class="btn btn-outline btn-sm">↻ Read screenshots now</button>
+                    </form>
+                    <p class="small muted">Your proof is saved. If the old queue has stalled, this immediately starts Gemini in your current request.</p>
+                @endif
 
                 @if($agentEvidence->extracted)
                     <div class="readonly-grid" style="margin-top:12px">
