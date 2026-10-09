@@ -9,6 +9,24 @@ Recommended stack:
 - S3-compatible private object storage for evidence
 - Supervisor/systemd for queue workers
 
+## Fast AI screenshot reading
+
+Agent-system proof images are read **during the upload request** by default.
+There is no queue wait for that initial identity/top-up step; the page opens
+when Gemini returns or its bounded attempt fails. A literal instantaneous
+result is impossible (upload time, image analysis and provider latency vary).
+Set `AI_AGENT_FAST_PATH=true` explicitly on Laravel Cloud if desired, and
+`AI_AGENT_FAST_TIMEOUT_SECONDS=18` to bound the Gemini request. A stalled
+older agent proof has a **Read screenshots now** action on its page.
+
+**Keep a background queue worker running for bank receipts and Check.et
+rechecks.** Up to 12 bank receipts per transaction are intentionally processed
+in the background so their combined AI/API latency does not cause the web
+request to time out. The Employee transaction page polls a lightweight,
+authorization-checked status endpoint and refreshes when extraction progresses.
+For these longer operations use a persistent Laravel Cloud background process
+with `php artisan queue:work --queue=evidence,default --sleep=1 --tries=3 --timeout=120`.
+
 ## Required processes
 
 ```bash
