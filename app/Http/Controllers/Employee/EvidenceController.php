@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
 
 class EvidenceController extends Controller
 {
-    public function agent(Request $request, Transaction $transaction, EvidenceStorageService $storage): RedirectResponse
+    public function agent(Request $request, Transaction $transaction, EvidenceStorageService $storage, \App\Services\Transactions\FastEvidenceDispatcher $fastEvidence): RedirectResponse
     {
         $this->authorize('update',$transaction);
         abort_unless($transaction->type->requiresAgentScreenshot(),404);
@@ -52,9 +52,11 @@ class EvidenceController extends Controller
         }
 
         $transaction->update(['status'=>TransactionStatus::Processing,'review_reason'=>null]);
-        ProcessEvidenceJob::dispatch($first->id);
+        $fastEvidence->agent($first->id);
 
-        return back()->with('success',count($data['screenshots']).' agent proof image(s) uploaded for combined AI reading.');
+        return back()->with('success', config('agent_audit.evidence.fast_agent_extraction')
+            ? count($data['screenshots']).' agent proof image(s) read immediately.'
+            : count($data['screenshots']).' agent proof image(s) uploaded for combined AI reading.');
     }
 
     public function banks(Request $request, Transaction $transaction, EvidenceStorageService $storage): RedirectResponse
@@ -100,12 +102,31 @@ class EvidenceController extends Controller
         return back()->with('success','Upload a clearer screenshot.');
     }
 
-    public function retry(Request $request, EvidenceFile $evidence): RedirectResponse
+    public function retry(Request $request, EvidenceFile $evidence, \App\Services\Transactions\FastEvidenceDispatcher $fastEvidence): RedirectResponse
     {
         $this->authorize('update',$evidence->transaction);
         abort_unless(in_array($evidence->status,[EvidenceStatus::Failed,EvidenceStatus::Queued],true),422);
+        abort_if(in_array($evidence->transaction->status, [
+            TransactionStatus::Completed, TransactionStatus::Rejected, TransactionStatus::Cancelled,
+        ], true), 422);
         $evidence->update(['status'=>EvidenceStatus::Queued,'failure_reason'=>null]);
-        ProcessEvidenceJob::dispatch($evidence->id);
-        return back()->with('success','Evidence processing queued again.');
+        if ($evidence->kind === EvidenceKind::AgentSystem) {
+            // Supplemental proof images belong to the first active proof and
+            // are analyzed together, not as separate transactions.
+            $first = $evidence->transaction->evidenceFiles()
+                ->where('kind', EvidenceKind::AgentSystem->value)
+                ->whereNull('superseded_by_id')
+                ->orderBy('id')->first();
+            abort_unless($first !== null, 404);
+            $first->update(['status'=>EvidenceStatus::Queued,'failure_reason'=>null]);
+            $fastEvidence->agent($first->id);
+        } else {
+            ProcessEvidenceJob::dispatch($evidence->id);
+        }
+
+        return back()->with('success', $evidence->kind === EvidenceKind::AgentSystem
+            && config('agent_audit.evidence.fast_agent_extraction')
+            ? 'Agent proof re-read immediately.'
+            : 'Evidence processing queued again.');
     }
 }
