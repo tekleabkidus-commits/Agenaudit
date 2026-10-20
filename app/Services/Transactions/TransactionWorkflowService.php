@@ -125,6 +125,26 @@ class TransactionWorkflowService
             return $transaction->fresh();
         }
 
+        // SMS / receipt-link submissions are first-class evidence. No
+        // transaction is ready until every submitted payment is reconciled.
+        $unresolvedMessage = $transaction->paymentInputs()
+            ->whereIn('status',['pending','unavailable','review','duplicate'])
+            ->first();
+        if ($unresolvedMessage) {
+            $verifiedTotal = round((float)$transaction->payments
+                ->filter(fn ($p) => $p->internal_status === PaymentValidationStatus::Valid)
+                ->sum('amount'),2);
+            $transaction->update([
+                'status'=>$unresolvedMessage->status==='pending'
+                    ? TransactionStatus::Processing : TransactionStatus::PendingAdminReview,
+                'valid_payment_total'=>$verifiedTotal,
+                'bank_payment_total'=>round((float)$transaction->payments->sum('amount'),2),
+                'difference'=>$transaction->amount === null ? 0 : round($verifiedTotal - (float)$transaction->amount,2),
+                'review_reason'=>'A transaction SMS/link is waiting for official verification, reference review, or an approved recipient-account match. Recheck the saved message later.',
+            ]);
+            return $transaction->fresh();
+        }
+
         $payments = $transaction->payments;
         if ($payments->isEmpty()) {
             $transaction->update(['status'=>TransactionStatus::Processing,'valid_payment_total'=>0,'bank_payment_total'=>0,'difference'=>0]);
@@ -136,6 +156,7 @@ class TransactionWorkflowService
                 && in_array($p->rejection_code, [
                     'transfer_amount_unconfirmed',
                     'verification_amount_semantics_unknown',
+                    'message_amount_or_destination_review',
                 ], true));
 
             // Never retain an earlier positive valid total when a screenshot
