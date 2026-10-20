@@ -12,7 +12,7 @@ class TimeRiskService
 
     public function evaluate(CarbonInterface $bankAt, CarbonInterface $topupAt): array
     {
-        $minutes = abs($bankAt->diffInMinutes($topupAt, false));
+        $minutes = (int) floor(abs($bankAt->diffInMinutes($topupAt, false)));
         $risk = match (true) {
             $minutes > $this->settings->int('validation.critical_minutes', 720) => RiskLevel::Critical,
             $minutes > $this->settings->int('validation.alarming_minutes', 360) => RiskLevel::Alarming,
