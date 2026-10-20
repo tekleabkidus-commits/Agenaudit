@@ -15,6 +15,10 @@ final class PaymentMessageController extends Controller
     {
         $this->authorize('update',$transaction);
         abort_unless($transaction->type->requiresBankEvidence() && $transaction->agent_id,422);
+        $request->merge(['messages'=>array_values(array_filter(
+            (array)$request->input('messages',[]),
+            fn ($item)=>is_string($item) && trim($item)!==''
+        ))]);
         $data=$request->validate([
             'messages'=>['required','array','min:1','max:3'],
             'messages.*'=>['required','string','max:6000'],
