@@ -103,6 +103,32 @@
 </section>
 @endif
 
+@if($transaction->paymentInputs->isNotEmpty())
+<section class="card" style="margin-top:16px">
+    <div class="card-title-row">
+        <div><span class="eyebrow">MESSAGE / LINK EVIDENCE</span><h3>Official receipt verification</h3></div>
+        <span class="count-pill">{{ $transaction->paymentInputs->count() }} submission(s)</span>
+    </div>
+    <div class="payment-admin-grid">
+        @foreach($transaction->paymentInputs as $item)
+            <article class="payment-card">
+                <div class="payment-head">
+                    <b>{{ $item->input_type === 'receipt_url' ? 'Receipt link' : 'Transaction SMS' }} · {{ $item->reference ?? 'Reference unknown' }}</b>
+                    <span class="status-pill {{ $item->status==='verified'?'success':'warning' }}">{{ str($item->status)->title() }}</span>
+                </div>
+                <div class="detail-grid compact-details">
+                    <div><span>Verified provider amount</span><b>{{ $item->paymentRecord ? number_format((float)$item->paymentRecord->amount,2).' ETB' : 'Not verified' }}</b></div>
+                    <div><span>Approved for top-up</span><b>{{ $item->paymentRecord?->internal_status === App\Enums\PaymentValidationStatus::Valid ? 'Yes' : 'No' }}</b></div>
+                    <div><span>Check.et last checked</span><b>{{ $item->checked_at?->format('d M Y H:i') ?? 'Not checked' }}</b></div>
+                </div>
+                @if($item->failure_reason)<div class="alert warning" style="margin-top:9px">{{ $item->failure_reason }}</div>@endif
+                <p class="tiny muted">Original SMS/link is stored privately; it is not displayed in the audit summary.</p>
+            </article>
+        @endforeach
+    </div>
+</section>
+@endif
+
 <section class="card" style="margin-top:16px">
     <div class="card-title-row">
         <div><span class="eyebrow">PAYMENT EVIDENCE</span><h3>Bank Payments</h3></div>
