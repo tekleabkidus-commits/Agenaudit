@@ -220,7 +220,7 @@ class TransactionController extends Controller
     public function show(Request $request, Transaction $transaction, CreditLedgerService $credits, \App\Services\Banking\AgentTopupReferenceService $referenceService): View
     {
         $this->authorize('view',$transaction);
-        $transaction->load(['agent.brand','brand','payments.fromBank','payments.toBank','payments.receivingAccount','payments.evidenceFile','evidenceFiles','events.actor','correctionRequests']);
+        $transaction->load(['agent.brand','brand','payments.fromBank','payments.toBank','payments.receivingAccount','payments.evidenceFile','paymentInputs.paymentRecord','evidenceFiles','events.actor','correctionRequests']);
         $currentOutstanding = $transaction->agent ? $credits->outstanding($transaction->agent) : null;
         $referenceReconciliation = $referenceService->analyze($transaction);
 
