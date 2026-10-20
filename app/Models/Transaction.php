@@ -33,6 +33,7 @@ class Transaction extends Model
     public function employee(): BelongsTo { return $this->belongsTo(User::class, 'employee_id'); }
     public function evidenceFiles(): HasMany { return $this->hasMany(EvidenceFile::class); }
     public function payments(): HasMany { return $this->hasMany(PaymentRecord::class); }
+    public function paymentInputs(): HasMany { return $this->hasMany(PaymentInput::class); }
     public function confirmations(): HasMany { return $this->hasMany(TransactionConfirmation::class); }
     public function events(): HasMany { return $this->hasMany(TransactionEvent::class); }
     public function correctionRequests(): HasMany { return $this->hasMany(CorrectionRequest::class); }
