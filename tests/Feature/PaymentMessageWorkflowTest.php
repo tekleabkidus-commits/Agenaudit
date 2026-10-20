@@ -112,14 +112,14 @@ class PaymentMessageWorkflowTest extends TestCase
     public function test_outage_keeps_message_for_recheck_and_detects_reuse(): void
     {
         [$tx,$user]=$this->fixture();
-        Http::fake(['api.check.et/api/v1/verify'=>Http::response([],503)]);
+        Http::fake(['api.check.et/api/v1/verify'=>Http::sequence()
+            ->push([],503)->push($this->official(),200)]);
         $this->actingAs($user)->post(route('employee.transactions.payment-messages',$tx),
             ['messages'=>[$this->sms()]])->assertRedirect();
         $input=PaymentInput::firstOrFail();
         $this->assertSame('unavailable',$input->status);
         $this->assertDatabaseCount('payment_records',0);
 
-        Http::fake(['api.check.et/api/v1/verify'=>Http::response($this->official(),200)]);
         $this->actingAs($user)->post(
             route('employee.transactions.payment-messages.recheck',[$tx,$input])
         )->assertRedirect();
