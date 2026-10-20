@@ -38,8 +38,8 @@ class PaymentMessageWorkflowTest extends TestCase
             'username'=>'agentexample','username_normalized'=>'AGENTEXAMPLE','is_active'=>true,
         ]);
         $account=ReceivingAccount::create([
-            'bank_id'=>$bank->id,'account_number'=>'251900005900',
-            'normalized_account_number'=>'251900005900',
+            'bank_id'=>$bank->id,'account_number'=>'251900001234',
+            'normalized_account_number'=>'251900001234',
             'account_name'=>'Example Receiver',
             'normalized_account_name'=>Normalizer::name('Example Receiver'),
             'name_aliases'=>[],'is_active'=>true,
@@ -60,7 +60,7 @@ class PaymentMessageWorkflowTest extends TestCase
 
     private function sms(): string
     {
-        return 'You have transferred ETB 40,000.00 to Example Receiver (2519****5900) on 20/10/2026 06:56:48. '.
+        return 'You have transferred ETB 40,000.00 to Example Receiver (2519****1234) on 20/10/2026 06:56:48. '.
             'Your transaction number is DJTESTSMS01. Service fee is ETB 6.96. '.
             'https://transactioninfo.ethiotelecom.et/receipt/DJTESTSMS01';
     }
@@ -73,7 +73,7 @@ class PaymentMessageWorkflowTest extends TestCase
                 'status'=>'completed','amount'=>40000,'currency'=>'ETB',
                 'receiver_name'=>'Example Receiver',
                 'transaction_date'=>'2026-10-20T06:56:48+03:00',
-            ],$hasAccount?['receiver_account'=>'251900005900']:[]),
+            ],$hasAccount?['receiver_account'=>'251900001234']:[]),
         ]];
     }
 
