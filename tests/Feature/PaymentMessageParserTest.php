@@ -21,7 +21,7 @@ class PaymentMessageParserTest extends TestCase
 
     public function test_telebirr_sms_extracts_principal_separate_from_fee(): void
     {
-        $sms="Dear Test\nYou have transferred ETB 40,000.00 to Example Recipient (2519****5900) on 20/10/2026 06:56:48. ".
+        $sms="Dear Test\nYou have transferred ETB 40,000.00 to Example Recipient (2519****1234) on 20/10/2026 06:56:48. ".
             "Your transaction number is DJTESTTEXT01. The service fee is ETB 6.96 and 15% VAT ".
             "on the service fee is ETB 1.04. Your current E-Money Account balance is ETB 7,298.51. ".
             "To download please click this link: https://transactioninfo.ethiotelecom.et/receipt/DJTESTTEXT01.";
@@ -29,7 +29,7 @@ class PaymentMessageParserTest extends TestCase
         $this->assertSame('receipt_text',$parsed['input_type']);
         $this->assertSame('DJTESTTEXT01',$parsed['reference']);
         $this->assertSame('telebirr',$parsed['bank']);
-        $this->assertSame('2519****5900',$parsed['receiver_account']);
+        $this->assertSame('2519****1234',$parsed['receiver_account']);
         $this->assertSame('Example Recipient',$parsed['receiver_name']);
         $this->assertSame(40000.0,$parsed['amount_hint']);
         $this->assertSame(6.96,$parsed['sender_fee']);
