@@ -272,10 +272,57 @@
         <section class="card workflow-card">
             <div class="step-heading">
                 <span class="step-number">2</span>
-                <div><h3>Bank payment screenshot(s)</h3><p>One or many receipts may be combined into this single top-up.</p></div>
+                <div><h3>Paste bank transaction message or receipt link</h3><p>Verify transfers without bank screenshots. Multiple transfers can support one agent top-up.</p></div>
             </div>
 
             @if(!$finalized)
+                <form method="post" action="{{ route('employee.transactions.payment-messages',$transaction) }}" class="stack" style="margin-bottom:20px">
+                    @csrf
+                    <div class="field">
+                        <label>Payment 1 — official receipt link or full transaction SMS</label>
+                        <textarea class="textarea" name="messages[]" rows="3" required placeholder="https://transactioninfo.ethiotelecom.et/receipt/... or paste the entire bank SMS"></textarea>
+                    </div>
+                    <details>
+                        <summary class="small">Add more payments to this same agent top-up (up to 3 at once)</summary>
+                        <div class="field" style="margin-top:12px"><label>Payment 2</label>
+                            <textarea class="textarea" rows="3" name="messages[]" placeholder="Second transaction message or receipt link"></textarea></div>
+                        <div class="field"><label>Payment 3</label>
+                            <textarea class="textarea" rows="3" name="messages[]" placeholder="Third transaction message or receipt link"></textarea></div>
+                        <p class="small muted">Leave unused fields blank. Each message has its own unique transaction reference.</p>
+                    </details>
+                    <button class="btn btn-primary btn-lg" type="submit">Verify transaction messages</button>
+                    <p class="tiny muted">Uses official Check.et verification. Sender fees are excluded only when supported. Unverified or uncertain payments stay pending; messages are saved for recheck.</p>
+                </form>
+
+                @if($transaction->paymentInputs->isNotEmpty())
+                    <div class="payment-stack" style="margin-bottom:18px">
+                    @foreach($transaction->paymentInputs as $message)
+                        <article class="payment-card">
+                            <div class="payment-head">
+                                <div><b>{{ $message->input_type === 'receipt_url' ? 'Receipt link' : 'Transaction SMS' }} · Payment {{ $loop->iteration }}</b>
+                                    <div class="small muted">Reference: {{ $message->reference ?? 'Not identified yet' }}</div></div>
+                                <span class="status-pill {{ $message->status==='verified'?'success':'warning' }}">{{ str($message->status)->replace('_',' ')->title() }}</span>
+                            </div>
+                            <div class="readonly-grid" style="margin-top:9px">
+                                <div class="lock-field"><span>Check.et amount</span><b>{{ $message->paymentRecord ? number_format((float)$message->paymentRecord->amount,2).' ETB' : 'Awaiting verified amount' }}</b></div>
+                                <div class="lock-field"><span>Counted toward top-up</span><b>{{ $message->paymentRecord?->internal_status === App\Enums\PaymentValidationStatus::Valid ? 'Yes' : 'No — pending review' }}</b></div>
+                                <div class="lock-field"><span>Last checked</span><b>{{ $message->checked_at?->format('d M Y H:i') ?? 'Not yet' }}</b></div>
+                            </div>
+                            @if($message->failure_reason)
+                                <div class="alert warning" style="margin-top:9px">{{ $message->failure_reason }}</div>
+                            @endif
+                            @if(in_array($message->status,['unavailable','review','pending'],true))
+                                <form method="post" action="{{ route('employee.transactions.payment-messages.recheck',[$transaction,$message]) }}" style="margin-top:10px">
+                                    @csrf
+                                    <button type="submit" class="btn btn-outline btn-sm">↻ Recheck this message with Check.et</button>
+                                </form>
+                            @endif
+                        </article>
+                    @endforeach
+                    </div>
+                @endif
+                <details class="evidence"><summary>Optional: upload bank screenshot instead</summary>
+                <p class="small muted">Use only if your bank has no supported message or receipt link.</p>
                 <form method="post" action="{{ route('employee.transactions.bank-evidence',$transaction) }}" enctype="multipart/form-data" class="stack">
                     @csrf
                     <label class="upload-zone compact-zone">
@@ -284,8 +331,9 @@
                         <small>1–12 receipts. Each payment is independently validated.</small>
                         <input type="file" name="screenshots[]" multiple accept="image/*" required>
                     </label>
-                    <button class="btn btn-primary">Upload Payment Evidence</button>
+                    <button class="btn btn-outline">Upload bank screenshots (optional)</button>
                 </form>
+                </details>
             @endif
 
             @foreach($pendingBankEvidence as $evidence)
