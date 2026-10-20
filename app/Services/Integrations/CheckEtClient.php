@@ -55,6 +55,56 @@ class CheckEtClient
         return $payment->fromBank ?: $payment->toBank;
     }
 
+    /**
+     * Accept an official receipt link or SMS text. The provider resolves the
+     * issuing bank and reference; the caller must still independently match
+     * the verified receiver to an approved organization account.
+     *
+     * The caller validates allowed receipt domains before invoking this.
+     */
+    public function verifyReceiptInput(string $type, string $input): CheckEtResult
+    {
+        if (!in_array($type, ['receipt_url','receipt_text'],true)) {
+            throw new \InvalidArgumentException('Unsupported receipt input type.');
+        }
+        if (!$this->settings->bool('check_et.enabled',(bool)config('services.check_et.enabled'))
+            || !filled(config('services.check_et.api_key'))) {
+            return new CheckEtResult('disabled',[],[]);
+        }
+
+        $payload=[$type=>$input];
+        $base=rtrim((string)config('services.check_et.base_url','https://api.check.et'),'/');
+        $timeout=max(2,$this->settings->int('check_et.timeout_seconds',(int)config('services.check_et.timeout',8)));
+        try {
+            $response=Http::timeout($timeout)
+                ->acceptJson()
+                ->withToken((string)config('services.check_et.api_key'))
+                ->withoutRedirecting()
+                ->post($base.'/api/v1/verify',$payload);
+        } catch (Throwable) {
+            return new CheckEtResult('unavailable',[],[$type],'Bank verifier could not be reached.');
+        }
+
+        $json=is_array($response->json())?$response->json():[];
+        if (!$response->successful()) {
+            return new CheckEtResult('unavailable',[],[$type],'Check.et temporarily unavailable (HTTP '.$response->status().').');
+        }
+        if (data_get($json,'success')!==true || data_get($json,'exists')!==true) {
+            return new CheckEtResult('failed',$json,[$type],'No verified transaction found.');
+        }
+        $amount=data_get($json,'data.receipt.amount');
+        $method=strtolower(trim((string)data_get($json,'data.verification_method','')));
+        $status=strtolower(trim((string)data_get($json,'data.receipt.status','')));
+        $currency=strtoupper(trim((string)data_get($json,'data.receipt.currency','ETB')));
+        if ($method!=='official' || !is_numeric($amount) || !is_finite((float)$amount)
+            || (float)$amount<=0 || $currency!=='ETB'
+            || !in_array($status,['completed','complete','success','successful','settled','paid'],true)) {
+            return new CheckEtResult('ambiguous',$json,[$type],'Official completed ETB transfer amount is not established.');
+        }
+
+        return new CheckEtResult('passed',$json,[$type]);
+    }
+
     public function verify(PaymentRecord $payment, bool $allowScreenshotAmountDifference = false): CheckEtResult
     {
         if (!$this->enabledFor($payment)) return new CheckEtResult('disabled', [], []);
