@@ -14,6 +14,8 @@ return [
         'allowed_mimes' => ['image/jpeg', 'image/png', 'image/webp'],
         'max_bank_screenshots_per_transaction' => 12,
         'max_agent_proof_images_per_transaction' => 5,
+        'max_message_inputs_per_submission' => 3,
+        'allowed_receipt_hosts' => ['transactioninfo.ethiotelecom.et'],
         // The agent proof is the critical first step; avoid any background
         // queue delay on production. Disable explicitly if the web request
         // budget cannot support the configured AI provider.
