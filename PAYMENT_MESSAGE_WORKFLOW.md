@@ -10,7 +10,7 @@
 
 ## Pilot input formats
 - Telebirr official receipt URL: `https://transactioninfo.ethiotelecom.et/receipt/DJTESTLINK01`
-- Telebirr SMS: `You have transferred ETB 40,000.00 to Example Receiver (2519****5900) on 20/10/2026 06:56:48. Your transaction number is DJTESTTEXT01. The service fee is ETB 6.96 and the VAT is ETB 1.04. Receipt: https://transactioninfo.ethiotelecom.et/receipt/DJTESTTEXT01`
+- Telebirr SMS: `You have transferred ETB 40,000.00 to Example Receiver (2519****1234) on 20/10/2026 06:56:48. Your transaction number is DJTESTTEXT01. The service fee is ETB 6.96 and the VAT is ETB 1.04. Receipt: https://transactioninfo.ethiotelecom.et/receipt/DJTESTTEXT01`
 
 These are **synthetic fixtures**, not customer references. An SMS explicitly stating 40,000 ETB *transferred* supplies that amount as a hint; 6.96 ETB service fee and 1.04 ETB VAT must not be added to the principal.
 
