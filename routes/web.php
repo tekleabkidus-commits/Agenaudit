@@ -21,6 +21,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Employee\CorrectionController;
 use App\Http\Controllers\Employee\CheckEtRecheckController;
+use App\Http\Controllers\Employee\PaymentMessageController;
 use App\Http\Controllers\Employee\EvidenceController;
 use App\Http\Controllers\Employee\HomeController;
 use App\Http\Controllers\Employee\TransactionController;
@@ -106,6 +107,10 @@ Route::middleware('auth')->group(function () {
             ->middleware('throttle:90,1')->name('transactions.processing-status');
         Route::post('/transactions/{transaction}/agent-evidence', [EvidenceController::class, 'agent'])->middleware('throttle:uploads')->name('transactions.agent-evidence');
         Route::post('/transactions/{transaction}/bank-evidence', [EvidenceController::class, 'banks'])->middleware('throttle:uploads')->name('transactions.bank-evidence');
+        Route::post('/transactions/{transaction}/payment-messages', [PaymentMessageController::class, 'submit'])
+            ->middleware('throttle:8,1')->name('transactions.payment-messages');
+        Route::post('/transactions/{transaction}/payment-messages/{input}/recheck', [PaymentMessageController::class, 'recheck'])
+            ->middleware('throttle:6,1')->name('transactions.payment-messages.recheck');
         Route::post('/transactions/{transaction}/recheck-check-et', [CheckEtRecheckController::class, 'all'])
             ->middleware('throttle:3,1')->name('transactions.recheck-check-et');
         Route::post('/transactions/{transaction}/payments/{payment}/recheck-check-et', [CheckEtRecheckController::class, 'one'])
